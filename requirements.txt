@@ -1,0 +1,13 @@
+pywebview>=6.2
+pythonnet
+requests
+pillow
+pycaw
+comtypes
+icalendar
+recurring-ical-events
+tzdata
+winrt-Windows.Media.Control
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections
+winrt-Windows.Storage.Streams

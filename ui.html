@@ -1,0 +1,1819 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Моя панель</title>
+<style>
+  /* Светлое матовое стекло — в тон меню «Пуск» с Windhawk.
+     Настоящую прозрачность окно не умеет, поэтому фон — размытый снимок экрана под панелью (#glass). */
+  :root {
+    --tint: rgba(238, 240, 246, 0.64);
+    --card: rgba(255, 255, 255, 0.46);
+    --card-hi: rgba(255, 255, 255, 0.78);
+    --line: rgba(24, 28, 44, 0.08);
+    --text: #14161c;
+    --muted: #596073;
+    --faint: #8c92a2;
+    --accent: #2563eb;
+    --accent-2: #7c5cff;
+    --accent-soft: rgba(37, 99, 235, 0.11);
+    --shadow: 0 1px 2px rgba(20, 24, 40, .06), 0 6px 18px rgba(20, 24, 40, .06);
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+    --bg: #e9ebf1;
+    --surface: rgba(255, 255, 255, .34);
+    --surface-hi: rgba(255, 255, 255, .62);
+    --edge: rgba(255, 255, 255, .6);
+    --solid: #fff;
+    --popup: rgba(250, 251, 253, .97);
+    --overlay: rgba(236, 238, 244, .94);
+    --track: rgba(20, 24, 40, .13);
+    --inv: #14161c; --inv-fg: #fff; --inv-hover: #000;
+    --strip-tint: rgba(238, 240, 246, .86);
+    --outline: rgba(20, 24, 40, .13);
+    color-scheme: light;
+  }
+  /* тёмная тема — «Настройки → Тема» (или как в Windows) */
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --tint: rgba(22, 24, 30, .76);
+    --card: rgba(255, 255, 255, .06);
+    --card-hi: rgba(255, 255, 255, .1);
+    --line: rgba(255, 255, 255, .08);
+    --text: #eceef3;
+    --muted: #a2a8b6;
+    --faint: #737a8a;
+    --accent: #6b95ff;
+    --accent-2: #a084ff;
+    --accent-soft: rgba(107, 149, 255, .16);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .28);
+    --bg: #17191e;
+    --surface: rgba(255, 255, 255, .05);
+    --surface-hi: rgba(255, 255, 255, .1);
+    --edge: rgba(255, 255, 255, .08);
+    --solid: #2b2f38;
+    --popup: rgba(34, 37, 44, .98);
+    --overlay: rgba(22, 24, 30, .95);
+    --track: rgba(255, 255, 255, .16);
+    --inv: #eceef3; --inv-fg: #14161c; --inv-hover: #fff;
+    --strip-tint: rgba(28, 30, 36, .9);
+    --outline: rgba(255, 255, 255, .12);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--text); user-select: none; -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--track); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-button { display: none; height: 0; }
+  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8;
+        stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  #glass { position: fixed; inset: 0; z-index: -3; background: var(--bg) center/cover no-repeat; transform: scale(1.04); }
+  #glass::after { content: ""; position: absolute; inset: 0; background: var(--tint); }
+  .shell { height: 100%; display: flex; flex-direction: column; position: relative; isolation: isolate; }
+  #ambient { position: absolute; inset: -40px; z-index: -1; background: center/cover no-repeat;
+             filter: blur(70px) saturate(1.4); opacity: 0; transition: opacity .6s; pointer-events: none; }
+  #ambient.on { opacity: .22; }
+
+  /* верхняя строка */
+  header { display: flex; align-items: center; gap: 6px; padding: 12px 12px 10px; }
+  .tabs { flex: 1; display: flex; gap: 4px; padding: 4px; border-radius: 16px;
+          background: var(--surface); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  .tabs button {
+    flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+    padding: 7px 10px; border-radius: 12px; cursor: pointer; transition: background .15s, color .15s;
+  }
+  .tabs button svg { width: 16px; height: 16px; }
+  @media (max-width: 720px) {   /* узкая панель на ноутбуке — вкладки компактнее */
+    .tabs { gap: 2px; }
+    .tabs button { padding: 7px 5px; gap: 5px; font-size: 12.5px; }
+  }
+  .tabs { position: relative; }
+  .tabs button { position: relative; z-index: 1; transition: background .15s, color .15s, transform .1s; }
+  .tabs button:hover { color: var(--text); background: var(--surface-hi); }
+  .tabs button.on, .tabs button.on:hover { color: var(--text); background: transparent; }
+  /* белая «таблетка» под активной вкладкой — переезжает между вкладками, а не появляется на месте */
+  .tab-pill { position: absolute; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 12px; background: var(--solid);
+              box-shadow: 0 1px 3px rgba(20,24,40,.12); pointer-events: none;
+              transition: transform .32s cubic-bezier(.3,.8,.2,1), width .32s cubic-bezier(.3,.8,.2,1); }
+  .tab-pill.instant { transition: none; }
+  /* подложка под активной вкладкой — «жидкое стекло» */
+  .tab-pill { background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.72));
+              border: 1px solid rgba(255,255,255,.9); backdrop-filter: blur(10px) saturate(1.6);
+              box-shadow: 0 1px 3px rgba(20,24,40,.12), inset 0 1px 0 rgba(255,255,255,.9), inset 0 -1px 2px rgba(20,24,40,.06);
+              transform-origin: 50% 50%; }
+  html[data-theme="dark"] .tab-pill { background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.08));
+              border-color: rgba(255,255,255,.14); box-shadow: 0 1px 3px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.12); }
+  /* долгое нажатие — вкладку можно переставить */
+  .tabs button.lift { z-index: 3; scale: 1.08; background: var(--solid); box-shadow: 0 8px 20px rgba(20,24,40,.22);
+                      transition: scale .2s cubic-bezier(.34,1.56,.64,1), box-shadow .2s; cursor: grabbing; }
+  .tabs.reorder button:not(.lift) { transition: transform .22s cubic-bezier(.3,.8,.2,1); }
+  .tabs button:active, .icon-btn:active { transform: scale(.94); }
+  .tabs button.on svg { color: var(--accent); }
+  .icon-btn { width: 34px; height: 34px; border-radius: 12px; border: 0; background: transparent; color: var(--muted);
+              display: grid; place-items: center; cursor: pointer; transition: background .15s, color .15s, transform .1s; }
+  .icon-btn:hover { background: var(--surface-hi); color: var(--text); }
+  #pin.on { color: var(--accent); background: var(--accent-soft); }
+  #pin.on svg { fill: currentColor; }
+
+  main { flex: 1; padding: 6px 16px 10px; overflow: hidden; }
+  section { display: none; height: 100%; flex-direction: column; gap: 12px; }
+  section.on { display: flex; animation: tabin .26s cubic-bezier(.3,.8,.2,1); }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  /* --dx: вкладка правее — содержимое въезжает справа, левее — слева; 0 — просто проявляется снизу */
+  @keyframes tabin { from { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 4px)); } to { opacity: 1; transform: none; } }
+  /* при каждом открытии панели блоки вкладки проявляются по очереди */
+  .shell.enter section.on > * { animation: rise .34s cubic-bezier(.3,.8,.2,1) both; }
+  .shell.enter section.on > :nth-child(2) { animation-delay: .04s; }
+  .shell.enter section.on > :nth-child(3) { animation-delay: .08s; }
+  .shell.enter section.on > :nth-child(n+4) { animation-delay: .12s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+  footer { padding: 0 16px 10px; font: 11px var(--mono); color: var(--faint); display: flex; justify-content: space-between; }
+
+  button.b {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--edge); background: var(--card); color: var(--text);
+    font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; cursor: pointer; box-shadow: var(--shadow);
+  }
+  button.b svg { width: 15px; height: 15px; }
+  button.b:hover { background: var(--card-hi); }
+  button.b:disabled { opacity: .4; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .label { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+  textarea {
+    width: 100%; resize: none; font: inherit; color: var(--text); flex: none;
+    background: var(--card); border: 1px solid var(--edge); border-radius: 16px; padding: 12px 14px;
+    outline: none; user-select: text; transition: border-color .15s, background .15s; box-shadow: var(--shadow);
+  }
+  textarea:focus { border-color: rgba(37, 99, 235, 0.45); background: var(--card-hi); }
+  textarea::placeholder { color: var(--faint); }
+
+  .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--edge); }
+  .seg button { border: 0; background: transparent; color: var(--muted); font: 600 12px var(--mono);
+                padding: 5px 11px; border-radius: 999px; cursor: pointer; }
+  .seg button.on { background: var(--solid); color: var(--accent); box-shadow: 0 1px 3px rgba(20,24,40,.12); }
+
+  /* плеер */
+  .sources { display: flex; gap: 6px; flex-wrap: wrap; min-height: 26px; }
+  .chip { border: 1px solid var(--edge); background: var(--surface); color: var(--muted);
+          font: inherit; font-size: 12px; padding: 3px 12px; border-radius: 999px; cursor: pointer; }
+  .chip.on { color: var(--text); background: var(--solid); }
+  .track { display: flex; gap: 18px; align-items: center; }
+  .cover { width: 118px; height: 118px; border-radius: 18px; flex: none; background: var(--surface) center/cover no-repeat;
+           box-shadow: 0 10px 28px rgba(20,24,40,.22); display: grid; place-items: center; color: var(--faint); }
+  .cover svg { width: 36px; height: 36px; }
+  .meta { min-width: 0; }
+  .src { font: 600 11px var(--mono); color: var(--accent); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+  .title { font-size: 19px; font-weight: 700; line-height: 1.25;
+           display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: balance; }
+  .artist { color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { height: 5px; border-radius: 3px; background: var(--track); cursor: pointer; position: relative; }
+  .bar:hover { height: 7px; margin: -1px 0; }
+  .bar.off { cursor: default; opacity: .5; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .times { display: flex; justify-content: space-between; margin-top: 6px; font: 11.5px var(--mono);
+           color: var(--muted); font-variant-numeric: tabular-nums; }
+  .controls { display: flex; justify-content: center; align-items: center; gap: 6px; }
+  .controls button { width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer; background: transparent;
+                     color: var(--text); display: grid; place-items: center; }
+  .controls button:hover { background: var(--surface-hi); }
+  .controls button:disabled { opacity: .3; cursor: default; background: transparent; }
+  .controls button svg { width: 20px; height: 20px; }
+  .controls .play { width: 54px; height: 54px; background: var(--inv); color: var(--inv-fg); box-shadow: 0 6px 16px rgba(20,24,40,.25); }
+  .controls .play:hover { background: var(--inv-hover); }
+  .controls .play svg { fill: currentColor; stroke: none; width: 22px; height: 22px; }
+  .controls .skip { font: 600 11.5px var(--mono); width: 46px; color: var(--muted); }
+  .vol { display: grid; grid-template-columns: 34px 92px 1fr 40px; align-items: center; gap: 4px 8px;
+         padding: 10px 12px; border-radius: 18px; background: var(--card); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  .vol .name { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vol .pct { font: 11.5px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .vol .icon-btn { width: 30px; height: 30px; }
+  .vol .spacer { width: 30px; }
+  .outs { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+          padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--line); }
+  .outs .label { margin-right: 4px; }
+  .out-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--edge); background: var(--surface);
+              color: var(--muted); font: inherit; font-size: 12px; padding: 4px 11px; border-radius: 999px; cursor: pointer; }
+  .out-chip svg { width: 14px; height: 14px; }
+  .out-chip:hover { color: var(--text); background: var(--surface-hi); }
+  .out-chip.on { color: var(--accent); background: var(--solid); border-color: var(--edge); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent) var(--p, 50%), var(--track) var(--p, 50%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; margin-top: -5.5px;
+    border-radius: 50%; background: var(--solid); box-shadow: 0 1px 4px rgba(20,24,40,.35); }
+  .empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text); }
+  .empty .muted { margin-top: 4px; }
+  .empty svg { width: 34px; height: 34px; color: var(--faint); margin-bottom: 10px; }
+
+  /* переводчик */
+  #tr-in { height: 104px; }
+  .out { flex: 1; position: relative; background: var(--card); border: 1px solid var(--edge); border-radius: 16px;
+         padding: 12px 14px; overflow: auto; user-select: text; white-space: pre-wrap; font-size: 15px; box-shadow: var(--shadow); }
+  .lang { font: 11.5px var(--mono); color: var(--muted); }
+
+  /* заготовки — сгруппированы в карточки, как папки в «Пуске» */
+  .list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 10px; margin: 0 -6px; padding: 0 6px 4px; }
+  .gcard { padding: 6px; border-radius: 20px; background: var(--card); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  .gcard .label { padding: 6px 10px 4px; }
+  .snip { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 14px; cursor: pointer; }
+  .snip:hover { background: var(--surface-hi); }
+  .snip .ic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center;
+              background: var(--solid); color: var(--accent); flex: none; box-shadow: 0 1px 3px rgba(20,24,40,.1); }
+  .snip .ic svg { width: 16px; height: 16px; }
+  .snip .l { font-weight: 600; font-size: 13.5px; }
+  .snip .t { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .snip .c { opacity: 0; color: var(--muted); }
+  .snip:hover .c { opacity: 1; }
+
+  /* скриншоты */
+  .shots { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-content: start;
+           margin: 0 -6px; padding: 2px 6px 6px; }
+  .shot { position: relative; border-radius: 14px; overflow: hidden; cursor: grab; -webkit-user-drag: none; aspect-ratio: 16 / 10;
+          background: var(--card) center/cover no-repeat; border: 1px solid var(--edge); box-shadow: var(--shadow);
+          transition: transform .12s, box-shadow .12s; }
+  .shot:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(20,24,40,.18); }
+  .shot .when { position: absolute; left: 6px; bottom: 6px; font: 600 10.5px var(--mono); color: #fff;
+                background: rgba(20,24,40,.55); padding: 2px 7px; border-radius: 99px; }
+  .shot .acts { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+  .shot:hover .acts { opacity: 1; }
+  .shot .acts button { width: 28px; height: 28px; border-radius: 9px; border: 0; background: var(--solid);
+                       color: var(--text); display: grid; place-items: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20,24,40,.2); }
+  .shot .acts button svg { width: 15px; height: 15px; }
+  .shot .acts button:hover { color: var(--accent); }
+  .shot.first { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* таймер в нижней строке */
+  footer { align-items: center; }
+  #timerbtn { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer;
+              font: 600 11.5px var(--mono); color: var(--muted); padding: 3px 8px; border-radius: 999px; }
+  #timerbtn svg { width: 14px; height: 14px; }
+  #timerbtn:hover { background: var(--surface-hi); color: var(--text); }
+  #timerbtn.run { color: var(--accent); background: var(--accent-soft); }
+  #timerbtn.done { color: #fff; background: #e5484d; }
+  #timerpop { position: fixed; right: 12px; bottom: 34px; width: 300px; padding: 14px; border-radius: 18px; z-index: 50;
+              background: var(--popup); border: 1px solid var(--edge);
+              box-shadow: 0 16px 40px rgba(20,24,40,.22); display: flex; flex-direction: column; gap: 10px; }
+  #timerpop[hidden] { display: none; }   /* иначе display:flex перебивает hidden и окно открыто сразу */
+  #timerpop .big { font: 700 34px var(--mono); text-align: center; letter-spacing: .02em; }
+  #timerpop .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  #timerpop .row button.b { flex: 1; justify-content: center; padding: 6px 0; }
+  #timerpop input { flex: 1; min-width: 0; font: 600 14px var(--mono); padding: 7px 12px; border-radius: 999px; outline: none;
+                    border: 1px solid rgba(20,24,40,.12); background: var(--solid); user-select: text; }
+  #timerpop .hint { color: var(--muted); font-size: 11.5px; }
+
+  /* полка */
+  .shelf-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-content: start;
+                margin: 0 -6px; padding: 2px 6px 6px; }
+  .file { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 14px; cursor: grab;
+          background: var(--card); border: 1px solid var(--edge); box-shadow: var(--shadow); min-width: 0;
+          transition: transform .12s, box-shadow .12s; }
+  .file:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(20,24,40,.18); }
+  .file .pic { width: 40px; height: 40px; flex: none; border-radius: 8px; background: center/contain no-repeat; }
+  .file .pic.thumb { background-size: cover; }
+  .file .txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .file .nm { font-weight: 600; font-size: 12.5px; line-height: 1.25; overflow: hidden; display: -webkit-box;
+              -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+  .file .mt { color: var(--muted); font-size: 11.5px; }
+  .file .acts { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+  .file:hover .acts { opacity: 1; }
+  .file .acts button { width: 26px; height: 26px; border-radius: 8px; border: 0; background: var(--solid);
+                       color: var(--text); display: grid; place-items: center; cursor: pointer; box-shadow: 0 1px 3px rgba(20,24,40,.2); }
+  .file .acts button svg { width: 14px; height: 14px; }
+  .file .acts button:hover { color: var(--accent); }
+
+  /* редактирование заготовок и ссылок */
+  .snip .row-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+  .snip:hover .row-acts { opacity: 1; }
+  .snip .row-acts .icon-btn { width: 30px; height: 30px; color: var(--muted); }
+  .snip .row-acts .icon-btn:hover { color: var(--text); background: var(--solid); }
+  .snip .row-acts .del.armed { color: #fff; background: #e5484d; width: auto; padding: 0 10px; font-size: 12px; font-weight: 600; }
+  .editor { padding: 12px; border-radius: 20px; background: var(--card-hi); border: 1px solid var(--edge); box-shadow: var(--shadow);
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .editor .full { grid-column: 1 / -1; }
+  .editor label { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .editor input { font: inherit; font-size: 13.5px; color: var(--text); padding: 8px 11px; border-radius: 11px; outline: none;
+                  border: 1px solid var(--line); background: var(--solid); user-select: text; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .editor input:focus { border-color: rgba(37,99,235,.5); }
+  .editor .acts { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .editor .acts .hint { flex: 1; font-size: 12px; color: var(--muted); }
+  .gpick { display: flex; flex-wrap: wrap; gap: 6px; }
+  .gpick button { border: 1px solid var(--line); background: var(--solid); color: var(--muted); font: inherit; font-size: 12.5px;
+                  padding: 5px 12px; border-radius: 999px; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .gpick button:hover { color: var(--text); border-color: rgba(20,24,40,.2); }
+  .gpick button.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .gpick button.new { border-style: dashed; }
+  .gpick input { width: 170px; padding: 5px 11px !important; border-radius: 999px !important; }
+  button.b.primary { background: var(--inv); color: var(--inv-fg); border-color: var(--text); }
+  button.b.primary:hover { background: var(--inv-hover); }
+
+  .prof { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .prof select { font: inherit; font-size: 12.5px; color: var(--text); padding: 5px 8px; border-radius: 999px;
+                 border: 1px solid var(--edge); background: var(--card); box-shadow: var(--shadow); cursor: pointer; }
+
+  /* заметки */
+  #note-in { height: 112px; }
+  .notes { flex: 1; overflow: auto; display: flex; flex-direction: column; padding: 4px 14px; border-radius: 18px;
+           background: var(--card); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  .notes:has(.muted:only-child) { background: transparent; border-color: transparent; box-shadow: none; padding: 0 2px; }
+  .note { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .note:last-child { border-bottom: 0; }
+  .note time { font: 11.5px var(--mono); color: var(--accent); padding-top: 2px; }
+
+  .toast { position: fixed; left: 50%; bottom: 34px; transform: translate(-50%, 16px); opacity: 0;
+           background: var(--inv); color: var(--inv-fg); font-weight: 600; font-size: 12.5px;
+           padding: 6px 14px; border-radius: 99px; transition: .18s; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  /* шпаргалка */
+  #help { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
+          background: var(--overlay); backdrop-filter: blur(6px); animation: fade .15s ease-out; }
+  #help[hidden] { display: none; }
+  #help header { padding-bottom: 6px; }
+  #help h2 { flex: 1; font-size: 16px; font-weight: 700; padding-left: 6px; }
+  #help .body { flex: 1; overflow: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  #help .hcard { padding: 10px 14px; border-radius: 18px; background: var(--card-hi); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  #help .hcard .label { margin: 2px 0 6px; }
+  #help dl { display: grid; grid-template-columns: 150px 1fr; gap: 5px 12px; font-size: 13px; }
+  #help dt { color: var(--muted); }
+  #help dd { margin: 0; }
+  #help kbd { font: 600 11.5px var(--mono); padding: 1px 6px; border-radius: 6px; background: var(--solid);
+              border: 1px solid var(--line); box-shadow: 0 1px 0 rgba(20,24,40,.08); white-space: nowrap; }
+  #help .note { font-size: 12.5px; color: var(--muted); }
+  #helpbtn.on { color: var(--accent); background: var(--accent-soft); }
+  .qmark { font: 700 16px/1 "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+
+  /* ---------- анимации внутри панели ---------- */
+  @keyframes pop { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+  @keyframes leave { to { opacity: 0; transform: scale(.9); } }
+  @keyframes popin { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
+  /* открыл вкладку — карточки и строки проявляются волной (--i — номер карточки) */
+  section.fresh :is(.file, .shot, .snip) { animation: rise .32s cubic-bezier(.3,.8,.2,1) both;
+    animation-delay: calc(min(var(--i, 0), 12) * 28ms + 40ms); }
+  .pop { animation: pop .4s cubic-bezier(.34,1.56,.64,1) both !important; }      /* появилась, пока панель открыта */
+  .leaving { animation: leave .16s ease-in forwards !important; pointer-events: none; }
+  #timerpop:not([hidden]) { animation: popin .22s cubic-bezier(.2,.9,.3,1.15); transform-origin: 100% 100%; }
+  #help:not([hidden]) { animation: popin .22s cubic-bezier(.2,.9,.3,1.1); transform-origin: 90% 0; }
+  .toast { transition: opacity .2s, transform .38s cubic-bezier(.34,1.56,.64,1); }
+  /* плеер: кнопки пружинят, значок паузы переворачивается, новый трек въезжает */
+  .controls button { transition: background .15s, transform .12s; }
+  .controls button:active:not(:disabled) { transform: scale(.88); }
+  .controls .play svg.flip { animation: flip .28s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes flip { from { opacity: 0; transform: scale(.4) rotate(-45deg); } to { opacity: 1; transform: none; } }
+  #p-body.swap .cover { animation: coverIn .5s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes coverIn { from { opacity: 0; transform: scale(.82) rotate(-5deg); } to { opacity: 1; transform: none; } }
+  #p-body.swap .meta > * { animation: rise .36s cubic-bezier(.3,.8,.2,1) both; }
+  #p-body.swap .meta > :nth-child(2) { animation-delay: .05s; }
+  #p-body.swap .meta > :nth-child(3) { animation-delay: .1s; }
+
+  /* приёмник полки: файл тащат к верхнему краю — панель сама становится «Положить на полку»
+     (panel.py: _drop_enter). --drop-w/--drop-h — видимая часть окна в CSS-пикселях */
+  #drop { display: none; position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 60;
+          width: var(--drop-w, 380px); height: var(--drop-h, 70px); padding: 8px 10px 10px; }
+  html.drop #drop { display: block; }
+  html.drop .shell { opacity: 0 !important; transition: opacity .12s; }
+  #drop .dz { height: 100%; display: flex; align-items: center; justify-content: center; gap: 12px;
+              border-radius: 14px; border: 1.5px dashed rgba(37, 99, 235, .38); background: var(--surface);
+              transition: background .15s, border-color .15s, transform .2s cubic-bezier(.34,1.56,.64,1);
+              animation: popin .26s .1s cubic-bezier(.2,.9,.3,1.15) both; }
+  #drop .dz svg { width: 22px; height: 22px; color: var(--accent); }
+  #drop .txt { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+  #drop .txt b { font-size: 13.5px; white-space: nowrap; }
+  #drop .txt span { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #drop.hot .dz { background: var(--accent-soft); border-color: var(--accent); transform: scale(1.03); }
+  #drop.done .dz { border-style: solid; border-color: transparent; background: var(--surface-hi); }
+  #drop.done .txt b { color: var(--accent); }
+  #drop.done .dz svg { animation: pop .4s cubic-bezier(.34,1.56,.64,1); }
+
+  /* ---------- приветствие и экскурсия (первый запуск) ---------- */
+  #welcome { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             gap: 14px; text-align: center; padding: 24px 40px; background: var(--overlay); backdrop-filter: blur(10px); overflow: hidden; }
+  #welcome[hidden] { display: none; }
+  #welcome::before { content: ""; position: absolute; width: 520px; height: 520px; border-radius: 50%; z-index: -1; opacity: .35;
+                     background: radial-gradient(circle, var(--accent), transparent 62%); filter: blur(30px);
+                     animation: drift 9s ease-in-out infinite alternate; }
+  @keyframes drift { from { transform: translate(-120px, -80px); } to { transform: translate(140px, 90px); } }
+  #welcome > * { animation: rise .55s cubic-bezier(.2,.9,.3,1.1) both; }
+  #welcome > :nth-child(2) { animation-delay: .12s; } #welcome > :nth-child(3) { animation-delay: .2s; }
+  #welcome > :nth-child(4) { animation-delay: .28s; } #welcome > :nth-child(5) { animation-delay: .36s; }
+  #welcome .logo { animation: logoIn .7s cubic-bezier(.34,1.56,.64,1) both; filter: drop-shadow(0 10px 24px rgba(37,99,235,.45)); }
+  @keyframes logoIn { from { opacity: 0; transform: scale(.4) rotate(-12deg); } to { opacity: 1; transform: none; } }
+  #welcome h1 { font-size: 26px; font-weight: 800; letter-spacing: -.01em; }
+  #welcome .sub { color: var(--muted); font-size: 14px; max-width: 460px; text-wrap: balance; }
+  #welcome .feats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  #welcome .feats span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px;
+                         background: var(--card-hi); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+  #welcome .feats svg { width: 15px; height: 15px; color: var(--accent); }
+  #welcome .btns { display: flex; gap: 10px; margin-top: 6px; }
+  #welcome .btns button.b { font-size: 13.5px; padding: 9px 18px; }
+  #tour { position: fixed; inset: 0; z-index: 80; }
+  #tour[hidden] { display: none; }
+  #tour .spot { position: absolute; border-radius: 16px; pointer-events: none;
+                box-shadow: 0 0 0 9999px rgba(8, 10, 18, .58), 0 0 0 2px var(--accent), 0 0 22px 4px var(--accent-soft);
+                transition: left .5s cubic-bezier(.34,1.25,.64,1), top .5s cubic-bezier(.34,1.25,.64,1),
+                            width .5s cubic-bezier(.34,1.25,.64,1), height .5s cubic-bezier(.34,1.25,.64,1), border-radius .5s; }
+  #tour .spot.none { width: 0 !important; height: 0 !important; left: 50% !important; top: 40% !important; box-shadow: 0 0 0 9999px rgba(8, 10, 18, .58); }
+  #tour .tcard { position: absolute; width: 310px; padding: 14px 16px 12px; border-radius: 18px; background: var(--popup);
+                 border: 1px solid var(--edge); box-shadow: 0 18px 44px rgba(0, 0, 0, .3); display: flex; flex-direction: column; gap: 6px;
+                 transition: left .5s cubic-bezier(.34,1.25,.64,1), top .5s cubic-bezier(.34,1.25,.64,1); }
+  #tour .tcard .k { font: 600 10.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--accent); }
+  #tour .tcard h3 { font-size: 15.5px; font-weight: 700; }
+  #tour .tcard p { font-size: 13px; color: var(--muted); line-height: 1.45; }
+  #tour .tcard p kbd { font: 600 11px var(--mono); padding: 1px 5px; border-radius: 5px; background: var(--solid); border: 1px solid var(--line); color: var(--text); }
+  #tour .tcard .tb { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  #tour .tcard .dots { flex: 1; display: flex; gap: 4px; }
+  #tour .tcard .dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--track); transition: width .3s, background .3s; }
+  #tour .tcard .dots i.on { width: 16px; background: var(--accent); }
+  #tour .tcard .body.swap { animation: islIn .35s cubic-bezier(.2,.9,.3,1.1) both; }
+  #tour .skip { position: absolute; right: 14px; bottom: 12px; border: 0; background: transparent; color: rgba(255,255,255,.75);
+                font: inherit; font-size: 12.5px; cursor: pointer; }
+  #tour .skip:hover { color: #fff; }
+
+  /* шторка: окно сжато до язычка сверху экрана */
+  #strip { display: none; }
+  /* ---------- живая шторка (как Dynamic Island) ----------
+     Окно шторки шире видимой формы (panel.py: STRIP_WIN); форму окна под содержимое меняет panel.py
+     (strip_shape), а .isl повторяет её в CSS с той же пружинкой — внутри всё раскладывается по ней. */
+  @media (max-height: 120px) {
+    .shell, .toast { display: none !important; }
+    #glass::after { background: var(--strip-tint); }
+    #strip { display: block; position: fixed; inset: 0; }
+    body::after { display: none; }
+  }
+  .isl { position: absolute; top: 0; left: 50%; transform: translateX(-50%); overflow: hidden;
+         width: var(--sw, 200px); height: var(--sh, 32px); border-radius: 0 0 var(--sr, 14px) var(--sr, 14px);
+         box-shadow: inset 0 -1px 0 var(--outline), inset 1px 0 0 var(--outline), inset -1px 0 0 var(--outline);
+         transition: width .42s cubic-bezier(.34,1.32,.64,1), height .42s cubic-bezier(.34,1.32,.64,1), border-radius .42s;
+         color: var(--text); font-size: 12.5px; }
+  .isl::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .4s;
+                 background: radial-gradient(120% 140% at 0% 50%, var(--isl-accent, var(--accent)), transparent 60%); }
+  .isl.s-music::before { opacity: .16; }
+  .isl-in { position: absolute; inset: 0; display: flex; align-items: center; gap: 9px; padding: 0 14px; min-width: 0; }
+  .isl-in.swap { animation: islIn .42s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes islIn { from { opacity: 0; transform: scale(.88); filter: blur(5px); } to { opacity: 1; transform: none; filter: none; } }
+  .isl svg { width: 15px; height: 15px; flex: none; color: var(--accent); }
+  .i-clock { font: 700 13px var(--mono); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+  .i-date { color: var(--muted); white-space: nowrap; }
+  .i-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--faint); flex: none; }
+  .i-mid { justify-content: center; }
+  .i-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; font-weight: 600;
+             mask-image: linear-gradient(90deg, #000 85%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .i-title > span { display: inline-block; }
+  /* длинное название — бесконечная лента: две копии подряд, сдвиг ровно на одну копию, поэтому шва нет */
+  .i-title.marq { mask-image: linear-gradient(90deg, transparent, #000 7%, #000 88%, transparent);
+                  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 88%, transparent); }
+  .i-title.marq > span { animation: marq var(--mt, 8s) linear infinite; }
+  .mq-a { display: inline-block; padding-right: 48px; }
+  @keyframes marq { 0%, 14% { transform: translateX(0); } 100% { transform: translateX(var(--md, -50px)); } }
+  /* мышь рядом — содержимое шторки чуть оживает */
+  .isl.near .isl-in { transform: scale(1.04); }
+  .isl-in { transition: transform .35s cubic-bezier(.34,1.4,.64,1); }
+  .i-muted { color: var(--muted); white-space: nowrap; flex: none; }
+  .i-mono { font: 700 14px var(--mono); font-variant-numeric: tabular-nums; }
+  .i-cover { width: 22px; height: 22px; border-radius: 6px; flex: none; background: var(--surface) center/cover no-repeat;
+             box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .i-eq { display: flex; align-items: center; gap: 2px; height: 16px; flex: none; }
+  .i-eq i { width: 3px; height: var(--h, 3px); border-radius: 2px; background: var(--isl-accent, var(--accent));
+            transition: height .11s ease-out; }
+  .i-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; position: relative; }
+  .i-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--accent);
+                  animation: ring 1.8s ease-out infinite; }
+  @keyframes ring { from { transform: scale(.5); opacity: .9; } to { transform: scale(1.6); opacity: 0; } }
+  .i-col { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+  .i-kicker { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .i-big { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .isl-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: var(--bw, 0%); pointer-events: none;
+             background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 1s linear, background .3s; }
+  /* таймер: последние 10 секунд — красным и с пульсом; время вышло — шторка дышит красным */
+  .isl.s-urgent .isl-bar { background: #e5484d; }
+  .isl.s-urgent .i-mono { color: #e5484d; animation: beat 1s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.08); } }
+  .isl.s-done { animation: redpulse 1.5s ease-in-out infinite; }
+  .isl.s-done svg { color: #e5484d; animation: shake 1.5s ease-in-out infinite; }
+  @keyframes redpulse { 0%, 100% { box-shadow: inset 0 0 0 1.5px rgba(229,72,77,.55), inset 0 0 10px rgba(229,72,77,.15); }
+                        50% { box-shadow: inset 0 0 0 1.5px rgba(229,72,77,1), inset 0 0 26px rgba(229,72,77,.4); } }
+  @keyframes shake { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-14deg); } 80% { transform: rotate(12deg); } 90% { transform: rotate(-6deg); } }
+  /* событие началось: по шторке пробегает блик */
+  .isl.s-now::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+                      background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.38) 50%, transparent 65%);
+                      background-size: 260% 100%; animation: shim 2.4s ease-in-out infinite; mix-blend-mode: overlay; }
+  @keyframes shim { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+  .isl.s-flash svg { color: #2fb46c; }
+
+  /* «вырез»: форму окна анимирует panel.py (регион окна), страница только проявляет и гасит содержимое */
+  html.notch-in .shell { animation: notchShow .3s .13s both; transform-origin: 50% 0; }
+  @keyframes notchShow { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+  html.notch-out .shell { opacity: 0; transition: opacity .09s; }
+  /* тонкая обводка по форме выреза: сверху её нет (панель приклеена к краю), углы — как у региона окна
+     (--panel-r / --strip-r считает скрипт: радиус региона в физических пикселях ÷ масштаб экрана) */
+  body::after { content: ""; position: fixed; inset: 0; z-index: 100; pointer-events: none;
+                border: 1px solid var(--outline); border-top: 0;
+                border-radius: 0 0 var(--panel-r, 20px) var(--panel-r, 20px); }
+
+
+  /* настройки */
+  #settings { position: fixed; inset: 0; z-index: 55; display: flex; flex-direction: column;
+              background: var(--overlay); backdrop-filter: blur(6px); }
+  #settings[hidden] { display: none; }
+  #settings:not([hidden]) { animation: popin .22s cubic-bezier(.2,.9,.3,1.1); transform-origin: 85% 0; }
+  #settings header { padding-bottom: 6px; }
+  #settings h2 { flex: 1; font-size: 16px; font-weight: 700; padding-left: 6px; }
+  #settings .body { flex: 1; overflow: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  #settings .hcard { padding: 10px 14px; border-radius: 18px; background: var(--card-hi); border: 1px solid var(--edge);
+                     box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+  .srow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; min-height: 30px; }
+  .srow > span:first-child { min-width: 0; }
+  .srow .path { font: 12px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srow select { font: inherit; font-size: 12.5px; color: var(--text); padding: 5px 8px; border-radius: 999px;
+                 border: 1px solid var(--edge); background: var(--card); cursor: pointer; }
+  .srow .seg { flex-wrap: wrap; justify-content: flex-end; }
+  .srow .seg button { font-family: inherit; font-weight: 600; font-size: 12px; }
+  .toggle { cursor: pointer; }
+  .toggle input { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; border-radius: 99px; flex: none;
+                  background: var(--track); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+                         background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .22s cubic-bezier(.34,1.56,.64,1); }
+  .toggle input:checked { background: var(--accent); }
+  .toggle input:checked::after { transform: translateX(16px); }
+  .tabchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tabchips button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--edge); background: var(--surface);
+                     color: var(--faint); font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+                     transition: background .15s, color .15s; }
+  .tabchips button svg { width: 15px; height: 15px; }
+  .tabchips button.on { color: var(--text); background: var(--solid); }
+  .tabchips button.on svg { color: var(--accent); }
+  .tabs button.off { display: none; }
+  #setbtn.on { color: var(--accent); background: var(--accent-soft); }
+  #setbtn { position: relative; }
+  #setbtn.upd::after { content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%;
+                       background: #e5484d; box-shadow: 0 0 0 2px var(--bg); }
+  .set-input { flex: 1; min-width: 0; font: 12px var(--mono); color: var(--text); padding: 7px 11px; border-radius: 999px; outline: none;
+               border: 1px solid var(--edge); background: var(--solid); user-select: text; }
+  .set-input:focus { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-tr" viewBox="0 0 24 24"><path d="M4 5h8M8 3v2m2.5 0c-1 4.5-3.5 8-7 10m2.5-5c1.3 2.3 3 4 5 5"/><path d="M13 21l4-9 4 9m-6.8-3h5.6"/></symbol>
+  <symbol id="i-snip" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8v16ZM5 19V5"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="m5 4 10 8-10 8V4Zm14 1v14"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6m0-6 6 6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+  <symbol id="i-head" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3v4ZM3 19a2 2 0 0 0 2 2h1v-6H3v4Z"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6Z"/><path d="M12 15v6"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-obs" viewBox="0 0 24 24"><path d="M12 2 5 7l1.5 9L12 22l5.5-6L19 7l-7-5Z"/><path d="M12 2v20M5 7l7 4 7-4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 2v3"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/></symbol>
+</svg>
+<div id="glass"></div>
+<div id="strip"><div class="isl" id="isl"><div class="isl-in" id="isl-in"></div><i class="isl-bar" id="isl-bar"></i></div></div>
+<div id="drop"><div class="dz"><svg><use href="#i-inbox"/></svg><span class="txt"><b id="drop-t">Положить на полку</b><span id="drop-s">отпусти файл здесь</span></span></div></div>
+<div class="shell">
+  <div id="ambient"></div>
+  <header>
+    <div class="tabs">
+      <span class="tab-pill"></span>
+      <button data-tab="player"><svg><use href="#i-music"/></svg>Плеер</button>
+      <button data-tab="tr"><svg><use href="#i-tr"/></svg>Перевод</button>
+      <button data-tab="snip"><svg><use href="#i-snip"/></svg>Тексты</button>
+      <button data-tab="links"><svg><use href="#i-bolt"/></svg>Ссылки</button>
+      <button data-tab="shots"><svg><use href="#i-img"/></svg>Снимки</button>
+      <button data-tab="shelf"><svg><use href="#i-inbox"/></svg>Полка</button>
+      <button data-tab="note"><svg><use href="#i-note"/></svg>Заметка</button>
+    </div>
+    <button class="icon-btn" id="setbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button>
+    <button class="icon-btn" id="helpbtn" title="Шпаргалка: что за что отвечает"><span class="qmark">?</span></button>
+    <button class="icon-btn" id="pin" title="Закрепить: не сворачиваться в шторку при клике мимо"><svg><use href="#i-pin"/></svg></button>
+    <button class="icon-btn" id="close" title="Закрыть (Esc)"><svg><use href="#i-x"/></svg></button>
+  </header>
+  <main>
+    <section id="player">
+      <div class="sources" id="sources"></div>
+      <div id="p-body" class="empty">Загрузка…</div>
+      <div class="vol" id="vol" hidden>
+        <button class="icon-btn" id="mute" title="Выключить звук"><svg><use href="#i-vol"/></svg></button>
+        <span class="name">Система</span>
+        <input type="range" id="v-master" min="0" max="100">
+        <span class="pct" id="v-master-p"></span>
+        <span class="spacer" id="v-app-sp"></span>
+        <span class="name" id="v-app-name"></span>
+        <input type="range" id="v-app" min="0" max="100">
+        <span class="pct" id="v-app-p"></span>
+        <div class="outs" id="outs"></div>
+      </div>
+    </section>
+
+    <section id="tr">
+      <div class="row">
+        <div class="seg" id="tr-dir">
+          <button data-d="auto">АВТО</button><button data-d="ru">→ RU</button><button data-d="en">→ EN</button>
+        </div>
+        <span class="lang grow" id="tr-lang"></span>
+        <button class="b" id="tr-paste" title="Вставить текст из буфера"><svg><use href="#i-clip"/></svg>Из буфера</button>
+      </div>
+      <textarea id="tr-in" placeholder="Скопируй текст где угодно — он появится здесь и переведётся сам"></textarea>
+      <div class="out" id="tr-out"><span class="muted">Перевод появится здесь.</span></div>
+      <div class="row">
+        <span class="muted grow">Панель можно не закрывать: копируй в другом окне, перевод обновится</span>
+        <button class="b" id="tr-copy" disabled><svg><use href="#i-copy"/></svg>Копировать</button>
+      </div>
+    </section>
+
+    <section id="snip">
+      <div class="list" id="snips"></div>
+      <div class="row">
+        <span class="muted grow">Клик — вставить в окно, где ты был. Наведи на строку — изменить или удалить.</span>
+        <button class="b" id="snip-file" title="Открыть весь список файлом">Файл</button>
+        <button class="b" id="snip-add"><svg><use href="#i-plus"/></svg>Добавить</button>
+      </div>
+    </section>
+
+    <section id="links">
+      <div class="list" id="links-list"></div>
+      <div class="row">
+        <span class="muted grow" id="links-hint">Клик — открыть. Наведи на строку — изменить или удалить.</span>
+        <label class="prof" id="prof-box" hidden title="В каком профиле Chrome открывать сайты">Chrome:
+          <select id="prof"></select></label>
+        <button class="b" id="links-file" title="Открыть весь список файлом">Файл</button>
+        <button class="b" id="links-add"><svg><use href="#i-plus"/></svg>Добавить</button>
+      </div>
+    </section>
+
+    <section id="shots">
+      <div class="row">
+        <span class="muted grow">Клик — вставить в окно, где ты был. Можно тащить мышкой в чат, Telegram, папку.</span>
+        <button class="b" id="shots-folder"><svg><use href="#i-folder"/></svg>Папка</button>
+      </div>
+      <div class="shots" id="shots-grid"></div>
+    </section>
+
+    <section id="shelf">
+      <div class="row">
+        <span class="muted grow">Положить — тащи файл к верхнему краю экрана. Взять — тащи отсюда в нужное окно.</span>
+        <button class="b" id="shelf-all" title="Зажми и тащи — вытащить все файлы сразу" hidden><svg><use href="#i-inbox"/></svg>Все</button>
+        <button class="b" id="shelf-clear" hidden><svg><use href="#i-trash"/></svg>Очистить</button>
+      </div>
+      <div class="shelf-grid" id="shelf-grid"></div>
+    </section>
+
+    <section id="note">
+      <textarea id="note-in" placeholder="Мысль, идея, задача… Enter — сохранить, Shift+Enter — новая строка"></textarea>
+      <div class="row">
+        <span class="muted grow" id="note-where">Сохраняется в папку заметок</span>
+        <button class="b" id="note-open"><svg><use href="#i-folder"/></svg>Открыть папку</button>
+      </div>
+      <div class="notes" id="notes"></div>
+    </section>
+  </main>
+  <footer><span>Клик мимо — шторка · Esc — закрыть</span>
+    <button id="timerbtn" title="Таймер"><svg><use href="#i-timer"/></svg><span id="timer-text">Таймер</span></button></footer>
+  <div id="timerpop" hidden>
+    <div id="tp-idle">
+      <div class="row">
+        <button class="b" data-min="1">1 мин</button><button class="b" data-min="5">5</button>
+        <button class="b" data-min="10">10</button><button class="b" data-min="25">25</button><button class="b" data-min="60">60</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="tp-in" placeholder="своё">
+        <button class="b" id="tp-go" style="flex:none;padding:6px 16px">Старт</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Или голосом: «Джарвис, таймер на 7 минут»</div>
+    </div>
+    <div id="tp-run" hidden>
+      <div class="big" id="tp-left">00:00</div>
+      <div class="row"><button class="b" id="tp-plus">+1 мин</button><button class="b" id="tp-cancel">Отменить</button></div>
+    </div>
+  </div>
+</div>
+<div id="welcome" hidden>
+  <svg class="logo" viewBox="0 0 64 64" style="width:76px;height:76px"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="15" fill="url(#lg)" stroke="none"/><rect x="16.5" y="8" width="31" height="11" rx="5.5" fill="#fff" stroke="none"/><circle cx="21.5" cy="13.5" r="2" fill="#2563eb" stroke="none"/><rect x="14.5" y="29" width="35" height="3.4" rx="1.7" fill="#fff" opacity=".9" stroke="none"/><rect x="14.5" y="37" width="27" height="3.4" rx="1.7" fill="#fff" opacity=".75" stroke="none"/><rect x="14.5" y="45" width="31" height="3.4" rx="1.7" fill="#fff" opacity=".6" stroke="none"/></svg>
+  <h1>Привет! Это твоя панель</h1>
+  <p class="sub">Сверху экрана живёт шторка, а по <b>Alt+Пробел</b> выезжает панель: музыка, перевод, заготовки, ссылки, скриншоты, полка для файлов и заметки — всё в одном месте.</p>
+  <div class="feats"><span><svg><use href="#i-music"/></svg>Плеер для всего</span><span><svg><use href="#i-inbox"/></svg>Полка для файлов</span><span><svg><use href="#i-timer"/></svg>Таймер и календарь</span></div>
+  <div class="btns"><button class="b primary" id="wel-tour">Показать, что тут есть</button><button class="b" id="wel-skip">Пропустить</button></div>
+</div>
+<div id="tour" hidden>
+  <div class="spot" id="tour-spot"></div>
+  <div class="tcard" id="tour-card">
+    <div class="body" id="tour-body"></div>
+    <div class="tb"><div class="dots" id="tour-dots"></div>
+      <button class="b" id="tour-back">Назад</button><button class="b primary" id="tour-next">Дальше</button></div>
+  </div>
+  <button class="skip" id="tour-skip">Пропустить экскурсию</button>
+</div>
+<div id="settings" hidden>
+  <header><h2>Настройки</h2>
+    <button class="icon-btn" id="set-close" title="Закрыть (Esc)"><svg><use href="#i-x"/></svg></button></header>
+  <div class="body">
+    <div class="hcard"><div class="label">Внешний вид</div>
+      <div class="srow"><span>Тема</span>
+        <div class="seg" id="set-theme"><button data-v="system">Как в Windows</button><button data-v="light">Светлая</button><button data-v="dark">Тёмная</button></div></div>
+    </div>
+    <div class="hcard"><div class="label">Вкладки</div>
+      <div class="tabchips" id="set-tabs"></div>
+      <span class="muted">Выключенные вкладки прячутся из панели. Ctrl+1…7 — по порядку видимых.</span>
+    </div>
+    <div class="hcard"><div class="label">Ссылки открывать</div>
+      <div class="srow"><span>Браузер</span>
+        <div class="seg" id="set-browser"><button data-v="chrome">Chrome</button><button data-v="edge">Edge</button><button data-v="default">Как в Windows</button></div></div>
+      <div class="srow" id="set-prof-row"><span>Профиль Chrome</span><select id="set-prof"></select></div>
+    </div>
+    <div class="hcard"><div class="label">Заметки</div>
+      <div class="srow"><span class="path" id="set-notes-path"></span><button class="b" id="set-notes-pick"><svg><use href="#i-folder"/></svg>Выбрать папку</button></div>
+      <label class="srow toggle"><span>Это папка Obsidian <span class="muted">— в начало файла дня пишутся свойства</span></span><input type="checkbox" id="set-obsidian"></label>
+    </div>
+    <div class="hcard"><div class="label">Календарь в шторке</div>
+      <div class="srow"><input class="set-input" id="set-cal" placeholder="Секретный адрес в формате iCal (…/basic.ics)" spellcheck="false">
+        <button class="b" id="set-cal-save">Подключить</button></div>
+      <span class="muted" id="set-cal-state"></span>
+      <span class="muted">Google Календарь → Настройки → твой календарь → «Интеграция календаря» → «Секретный адрес в формате iCal». Несколько календарей — через пробел.</span>
+    </div>
+    <div class="hcard"><div class="label">Музыка</div>
+      <div class="srow"><span>Кнопка в пустом плеере</span>
+        <div class="seg" id="set-music"><button data-v="yandex">Яндекс Музыка</button><button data-v="spotify">Spotify</button><button data-v="ytmusic">YouTube Music</button><button data-v="none">Ничего</button></div></div>
+      <span class="muted">Играющее плеер находит сам — любое приложение или сайт, который Windows показывает в медиа-панели.</span>
+    </div>
+    <div class="hcard"><div class="label">Прочее</div>
+      <label class="srow toggle"><span>Полка: файл, принесённый к верхнему краю, кладётся на полку</span><input type="checkbox" id="set-shelf"></label>
+      <label class="srow toggle"><span>Запускать вместе с Windows</span><input type="checkbox" id="set-auto"></label>
+    </div>
+    <div class="hcard"><div class="label">О программе</div>
+      <div class="srow"><span>Моя панель <b id="set-ver"></b></span><button class="b" id="set-data"><svg><use href="#i-folder"/></svg>Папка с данными</button></div>
+      <div class="srow"><span>Что умеет панель — коротко, по шагам</span><button class="b" id="set-tour">Пройти экскурсию</button></div>
+      <div class="srow"><span id="upd-text">Обновления</span><span class="row"><button class="b" id="upd-check">Проверить</button>
+        <button class="b primary" id="upd-go" hidden>Обновить</button></span></div>
+    </div>
+  </div>
+</div>
+<div id="help" hidden>
+  <header><h2>Шпаргалка</h2>
+    <button class="icon-btn" id="help-close" title="Закрыть шпаргалку (Esc)"><svg><use href="#i-x"/></svg></button></header>
+  <div class="body">
+    <div class="hcard"><div class="label">Панель</div><dl>
+      <dt>Открыть / закрыть</dt><dd><kbd>Alt+Пробел</kbd> · <kbd>Esc</kbd> · крестик. Открывается на мониторе, где мышь</dd>
+      <dt>Вкладки</dt><dd><kbd>Ctrl+1…7</kbd> — Плеер · Перевод · Тексты · Ссылки · Снимки · Полка · Заметка</dd>
+      <dt>Таймер</dt><dd>внизу справа · 1–60 мин или своё время (7, 1:30, 90с, 2ч) · голосом: «Джарвис, таймер на 7 минут», «сколько осталось», «отмени таймер»</dd>
+      <dt>Шторка</dt><dd>клик мимо — сворачивается в язычок сверху; навёл — разворачивается</dd>
+      <dt>Булавка</dt><dd>панель не сворачивается при клике мимо</dd>
+    </dl></div>
+    <div class="hcard"><div class="label">Вкладки</div><dl>
+      <dt>Плеер</dt><dd><kbd>Пробел</kbd> — пауза · клик по полосе — перемотка · −15 / +30 · громкость системы и приложения · «Вывод» — куда идёт звук</dd>
+      <dt>Перевод</dt><dd>скопируй текст где угодно — перевод обновится сам · АВТО / → RU / → EN</dd>
+      <dt>Тексты, Ссылки</dt><dd>клик — вставить / открыть · «Добавить» — новая строка · наведи на строку — изменить или удалить</dd>
+      <dt>Снимки</dt><dd>клик — вставить в окно, где ты был · зажми и тащи — в чат, Telegram, папку</dd>
+      <dt>Полка</dt><dd>положить — тащи файл к верхнему краю экрана, появится плашка · взять — тащи из вкладки в любое окно · «Все» — тащи всё сразу</dd>
+      <dt>Заметка</dt><dd><kbd>Enter</kbd> — сохранить в папку заметок (Настройки) · <kbd>Shift+Enter</kbd> — новая строка</dd>
+    </dl></div>
+    <div class="hcard"><div class="label">Рисование поверх экрана</div><dl>
+      <dt>Начать</dt><dd><kbd>Alt+S</kbd> — по краю монитора жёлтая рамка</dd>
+      <dt>Рисовать</dt><dd>левая кнопка — жёлтый маркер · правая — красная ручка</dd>
+      <dt>Отменить штрих</dt><dd><kbd>Ctrl+Z</kbd> — только пока горит рамка</dd>
+      <dt>Закончить</dt><dd><kbd>Alt+S</kbd> или <kbd>Enter</kbd> — пометки остаются, мышь снова работает с окнами</dd>
+      <dt>Дорисовать</dt><dd>снова <kbd>Alt+S</kbd> — старые пометки на месте</dd>
+      <dt>Стереть всё</dt><dd><kbd>Esc</kbd> · прокрутка · переход в другое окно</dd>
+    </dl></div>
+    <div class="hcard"><div class="label">Маркер в Chrome</div><dl>
+      <dt>Выделить</dt><dd>выдели текст → <kbd>Alt+H</kbd> или правый клик → «Выделить маркером»</dd>
+      <dt>Снять</dt><dd>клик по выделению (в ссылке — <kbd>Alt</kbd>+клик) · все сразу — правый клик → «снять все»</dd>
+    </dl></div>
+    <div class="note">Настройки и подробности — README.md в папке «Моя панель».</div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+window.onerror = (m, s, l) => { try { window.pywebview.api.log(`JS ${m} @${l}`); } catch (e) {} };
+const $ = (s) => document.querySelector(s);
+const api = () => window.pywebview.api;
+const icon = (id) => `<svg><use href="#i-${id}"/></svg>`;
+const TABS = ["player", "tr", "snip", "links", "shots", "shelf", "note"];   // порядок меняется перетаскиванием (tab_order)
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+let tab = store.get("tab", "player");
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1300);
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function fmt(sec) {
+  sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
+}
+
+function show(name) {
+  // ушёл с вкладки, где была открыта форма, — форму закрываем, чтобы она не висела невидимой
+  if (editing && editing.kind !== name) { const k = editing.kind; editing = null; renderList(k); }
+  const dir = Math.sign(TABS.indexOf(name) - TABS.indexOf(tab));
+  tab = name; store.set("tab", name);
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll("main > section").forEach(s => {
+    if (s.id !== name) { s.classList.remove("on"); return; }
+    s.style.setProperty("--dx", dir * 18 + "px"); s.style.setProperty("--dy", dir ? "0px" : "4px");
+    if (dir && s.classList.contains("on")) { s.classList.remove("on"); void s.offsetWidth; }
+    s.classList.add("on", "fresh");
+    clearTimeout(s.freshT); s.freshT = setTimeout(() => s.classList.remove("fresh"), 900);
+  });
+  movePill(!dir);
+  $("#ambient").classList.toggle("on", name === "player" && !!(pstate && pstate.cover));
+  if (name === "player") pollPlayer();
+  if (name === "tr") { watchClipboard(); $("#tr-in").focus(); }
+  if (name === "snip") loadSnips();
+  if (name === "links") loadLinks();
+  if (name === "shots") pollShots();
+  if (name === "shelf") pollShelf();
+  if (name === "note") { loadNotes(); $("#note-in").focus(); }
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { if (tabDragUsed) { tabDragUsed = false; return; } show(b.dataset.tab); });
+$("#close").onclick = () => api().close();
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { if (!$("#tour").hidden) { tourEnd(); return; } if (!$("#welcome").hidden) { welcomeDone(); return; }
+    if (!$("#settings").hidden) { settingsOpen(false); return; } if (!$("#help").hidden) { helpOpen(false); return; } if (editing) return; api().close(); return; }
+  if (e.ctrlKey && /^[1-7]$/.test(e.key)) { const v = visibleTabs()[+e.key - 1]; if (v) show(v); e.preventDefault(); }
+  const typing = ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName);
+  if (e.key === " " && tab === "player" && !typing) { e.preventDefault(); act("toggle"); }
+});
+
+/* ---------- плеер ---------- */
+let pstate = null, ptimer = null, dragging = false;
+async function pollPlayer() {
+  clearTimeout(ptimer);
+  if (tab !== "player") return;
+  if (!(await api().is_visible())) return;   // скрытая панель ничего не опрашивает
+  try {
+    const st = await api().media_state();
+    renderPlayer(st);
+    if (!dragging) renderVolume(await api().volume_state(st.source || null), st);
+    if (!outsAt || Date.now() - outsAt > 5000) renderOutputs(await api().outputs());
+  } catch (e) {}
+  ptimer = setTimeout(pollPlayer, 1000);
+}
+let pkey = null, pbase = null, praf = 0, lastSec = -1;
+function renderPlayer(st) {
+  const coverChanged = !pstate || pstate.cover !== st.cover;
+  const prev = pstate;
+  pstate = st;
+  $("#sources").innerHTML = (st.sources || []).length > 1 ? st.sources.map(s =>
+    `<button class="chip ${s.id === st.source ? "on" : ""}" data-id="${esc(s.id)}">${esc(s.name)}</button>`).join("") : "";
+  document.querySelectorAll(".chip").forEach(c => c.onclick = async () => { await api().media_select(c.dataset.id); pollPlayer(); });
+  const body = $("#p-body"), amb = $("#ambient");
+  if (!st.ok || st.empty) {
+    pkey = null; pbase = null;
+    amb.classList.remove("on");
+    body.className = "empty"; body.style.cssText = "";
+    body.innerHTML = `<div>${icon("music")}<div>${st.ok ? "Сейчас ничего не играет" : "Плеер недоступен"}</div>
+      <div class="muted">${st.ok ? "Включи музыку или видео — появится здесь" : esc(st.error || "")}</div>
+      ${st.ok && musicName() ? `<button class="b" id="open-music" style="margin-top:12px">${icon("music")}Открыть ${esc(musicName())}</button>` : ""}</div>`;
+    const om = $("#open-music"); if (om) om.onclick = () => api().open_music();
+    return;
+  }
+  if (coverChanged) amb.style.backgroundImage = st.cover ? `url('${st.cover}')` : "none";
+  amb.classList.toggle("on", !!st.cover);
+  // тот же трек — меняем только то, что поменялось (иначе каждую секунду всё рисуется заново и анимации сбрасываются)
+  const key = [st.source, st.title, st.artist, st.cover].join("|");
+  if (key === pkey && $("#bar")) { updatePlayer(st, prev); setProgBase(st); return; }
+  const swap = pkey !== null;                 // до этого играл другой трек — новый въезжает
+  pkey = key; pbase = null;
+  const pct = st.duration ? (st.position / st.duration * 100) : 0;
+  body.className = "";
+  body.style.cssText = "display:flex;flex-direction:column;gap:14px;flex:1;justify-content:center";
+  body.innerHTML = `
+    <div class="track">
+      <div class="cover" style="${st.cover ? `background-image:url('${st.cover}')` : ""}">${st.cover ? "" : icon("music")}</div>
+      <div class="meta">
+        <div class="src">${esc(st.sourceName)}</div>
+        <div class="title">${esc(st.title || "Без названия")}</div>
+        <div class="artist">${esc(st.artist || st.album || "")}</div>
+      </div>
+    </div>
+    <div>
+      <div class="bar ${st.canSeek ? "" : "off"}" id="bar"><i style="width:${pct.toFixed(2)}%"></i></div>
+      <div class="times"><span>${fmt(st.position)}</span><span>${st.duration ? fmt(st.duration) : "—"}</span></div>
+    </div>
+    <div class="controls">
+      <button class="skip" data-a="seek" data-v="-15" ${st.canSeek ? "" : "disabled"} title="Назад 15 с">−15</button>
+      <button data-a="prev" ${st.canPrev ? "" : "disabled"} title="Предыдущий">${icon("prev")}</button>
+      <button class="play" data-a="toggle" title="Пауза / играть (пробел)">${icon(st.playing ? "pause" : "play")}</button>
+      <button data-a="next" ${st.canNext ? "" : "disabled"} title="Следующий">${icon("next")}</button>
+      <button class="skip" data-a="seek" data-v="30" ${st.canSeek ? "" : "disabled"} title="Вперёд 30 с">+30</button>
+    </div>`;
+  body.querySelectorAll(".controls button").forEach(b => b.onclick = () => act(b.dataset.a, b.dataset.v));
+  const bar = $("#bar");
+  bar.onclick = (e) => {
+    if (!pstate || !pstate.canSeek) return;
+    const r = bar.getBoundingClientRect();
+    act("seek", (e.clientX - r.left) / r.width * pstate.duration - curPos());
+  };
+  if (swap) { void body.offsetWidth; body.classList.add("swap"); }
+  setProgBase(st);
+}
+function updatePlayer(st, prev) {
+  const body = $("#p-body"), can = { prev: st.canPrev, next: st.canNext, seek: st.canSeek };
+  body.querySelectorAll(".controls button[data-a]").forEach(b => { if (b.dataset.a in can) b.disabled = !can[b.dataset.a]; });
+  $("#bar").classList.toggle("off", !st.canSeek);
+  $("#p-body .times span:last-child").textContent = st.duration ? fmt(st.duration) : "—";
+  if (!prev || prev.playing !== st.playing) {      // пауза ⇄ играть — значок переворачивается
+    const play = body.querySelector(".play");
+    play.innerHTML = icon(st.playing ? "pause" : "play");
+    play.querySelector("svg").classList.add("flip");
+  }
+}
+/* полоска прогресса едет плавно между опросами (Python и так досчитывает позицию) */
+function curPos() {
+  if (!pbase) return pstate ? pstate.position || 0 : 0;
+  const p = pbase.pos + (pbase.playing ? (performance.now() - pbase.at) / 1000 : 0);
+  return pbase.dur ? Math.min(pbase.dur, p) : p;
+}
+function setProgBase(st) {
+  let pos = st.position || 0;
+  // разница меньше секунды — это просто неточность опроса; оставляем свою позицию, чтобы не дёргалось
+  if (pbase && pbase.playing && st.playing && Math.abs(curPos() - pos) < 1) pos = curPos();
+  pbase = { pos, at: performance.now(), playing: !!st.playing, dur: st.duration || 0 };
+  if (!praf) praf = requestAnimationFrame(progTick);
+}
+function progTick() {
+  praf = 0;
+  const fill = $("#bar i");
+  if (!fill || !pbase || tab !== "player") return;
+  const p = curPos();
+  fill.style.width = (pbase.dur ? p / pbase.dur * 100 : 0).toFixed(3) + "%";
+  const s = Math.floor(p);
+  if (s !== lastSec) { lastSec = s; const t = $("#p-body .times span"); if (t) t.textContent = fmt(p); }
+  if (pbase.playing) praf = requestAnimationFrame(progTick);
+}
+async function act(a, v) {
+  await api().media_do(a, v === undefined ? null : +v);
+  setTimeout(pollPlayer, 250);
+}
+
+/* громкость */
+function setRange(el, v) { el.value = v; el.style.setProperty("--p", v + "%"); }
+function renderVolume(v, st) {
+  const box = $("#vol");
+  if (v.master === undefined) { box.hidden = true; return; }
+  box.hidden = false;
+  setRange($("#v-master"), v.muted ? 0 : v.master);
+  $("#v-master-p").textContent = v.muted ? "выкл" : v.master + "%";
+  $("#mute").innerHTML = icon(v.muted || v.master === 0 ? "mute" : "vol");
+  const hasApp = v.app !== undefined && st && !st.empty;
+  ["#v-app-sp", "#v-app-name", "#v-app", "#v-app-p"].forEach(s => $(s).hidden = !hasApp);
+  if (hasApp) {
+    $("#v-app-name").textContent = st.sourceName;
+    setRange($("#v-app"), v.app);
+    $("#v-app-p").textContent = v.app + "%";
+  }
+}
+function bindRange(el, label, kind) {
+  el.addEventListener("pointerdown", () => dragging = true);
+  el.addEventListener("pointerup", () => setTimeout(() => dragging = false, 300));
+  el.addEventListener("input", () => {
+    el.style.setProperty("--p", el.value + "%");
+    label.textContent = el.value + "%";
+    clearTimeout(el.t);
+    el.t = setTimeout(() => api().volume_set(kind, +el.value, pstate && pstate.source), 40);
+  });
+}
+bindRange($("#v-master"), $("#v-master-p"), "master");
+bindRange($("#v-app"), $("#v-app-p"), "app");
+/* куда идёт звук */
+let outsAt = 0;
+function outIcon(o) {
+  const f = (o.name + " " + o.full).toLowerCase();
+  if (f.includes("монитор") || f.includes("nvidia") || f.includes("hdmi")) return "monitor";
+  if (f.includes("ноутбук")) return "laptop";
+  return "head";
+}
+function renderOutputs(list) {
+  outsAt = Date.now();
+  const box = $("#outs");
+  if (!list || list.length < 2) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<span class="label">Вывод</span>` + list.map(o =>
+    `<button class="out-chip ${o.on ? "on" : ""}" data-id="${esc(o.id)}" title="${esc(o.full)}">${icon(outIcon(o))}${esc(o.name)}</button>`).join("");
+  box.querySelectorAll(".out-chip").forEach(b => b.onclick = async () => {
+    if (b.classList.contains("on")) return;
+    await api().set_output(b.dataset.id);
+    toast("Звук: " + b.textContent);
+    renderOutputs(await api().outputs());
+    pollPlayer();
+  });
+}
+$("#mute").onclick = async () => { await api().volume_mute(); pollPlayer(); };
+
+/* ---------- переводчик ---------- */
+let dir = store.get("dir", "auto"), clipSeq = null, lastClip = "", trTimer = null, trResult = "", clipTimer = null;
+function paintDir() { document.querySelectorAll("#tr-dir button").forEach(b => b.classList.toggle("on", b.dataset.d === dir)); }
+document.querySelectorAll("#tr-dir button").forEach(b => b.onclick = () => { dir = b.dataset.d; store.set("dir", dir); paintDir(); runTranslate(); });
+paintDir();
+
+async function watchClipboard() {
+  clearTimeout(clipTimer);
+  if (tab !== "tr") return;
+  if (!(await api().is_visible())) return;
+  try {
+    const seq = await api().clipboard_seq();
+    if (seq !== clipSeq) { clipSeq = seq; await fillFromClipboard(false); }
+  } catch (e) {}
+  clipTimer = setTimeout(watchClipboard, 600);
+}
+async function fillFromClipboard(force) {
+  const clip = (await api().clipboard() || "").trim();
+  if (!clip || clip.length > 3000) { if (force) toast("В буфере нет текста"); return; }
+  if (!force && clip === lastClip) return;
+  if (!force && clip === trResult) return;   // это мы сами скопировали перевод
+  lastClip = clip; $("#tr-in").value = clip; runTranslate();
+}
+async function runTranslate() {
+  const text = $("#tr-in").value.trim();
+  if (!text) { $("#tr-out").innerHTML = "<span class='muted'>Перевод появится здесь.</span>"; $("#tr-copy").disabled = true; $("#tr-lang").textContent = ""; return; }
+  $("#tr-out").innerHTML = "<span class='muted'>Перевожу…</span>";
+  const r = await api().translate(text, dir);
+  if (!r.ok) { $("#tr-out").innerHTML = "<span class='muted'>" + esc(r.error) + "</span>"; return; }
+  trResult = r.text;
+  $("#tr-out").textContent = r.text;
+  $("#tr-lang").textContent = `${(r.from || "?").toUpperCase()} → ${r.to.toUpperCase()} · ${r.via}`;
+  $("#tr-copy").disabled = false;
+}
+$("#tr-in").addEventListener("input", () => { clearTimeout(trTimer); trTimer = setTimeout(runTranslate, 500); });
+$("#tr-paste").onclick = () => fillFromClipboard(true);
+$("#tr-copy").onclick = async () => { await api().copy(trResult); toast("Перевод скопирован"); };
+
+/* ---------- заготовки ---------- */
+function snipIcon(s) {
+  const t = (s.group + " " + s.text).toLowerCase();
+  if (t.includes("@") || t.includes("почт")) return "mail";
+  if (/^[+\d][\d\s()-]{6,}$/.test(s.text) || t.includes("телеф")) return "phone";
+  if (t.includes("http")) return "link";
+  return "snip";
+}
+// Оба списка устроены одинаково: группа · название · значение. У заготовок значение — text, у ссылок — open.
+const LISTS = {
+  snip:  { box: "#snips",      load: () => api().snippets(), save: (x) => api().save_snippets(x), key: "text",
+           valueLabel: "Текст",  placeholder: "что вставлять — почта, номер, фраза…", iconOf: (s) => snipIcon(s) },
+  links: { box: "#links-list", load: () => api().links(),    save: (x) => api().save_links(x),    key: "open",
+           valueLabel: "Ссылка или путь", placeholder: "https://…  или  C:\\папка  или  obsidian://…", iconOf: (l) => l.icon || linkIcon(l) },
+};
+const listItems = { snip: [], links: [] };
+let editing = null;   // { kind, index } — index -1 значит «новая строка»
+
+async function renderList(kind) {
+  const L = LISTS[kind];
+  const items = listItems[kind] = await L.load();
+  let html = "", group = null;
+  if (editing && editing.kind === kind) html += editorHtml(kind);
+  items.forEach((it, i) => {
+    if (it.group !== group) {
+      if (group !== null) html += `</div>`;
+      group = it.group; html += `<div class="gcard"><div class="label">${esc(group || "")}</div>`;
+    }
+    html += `<div class="snip" data-i="${i}" data-k="${esc(it.label + "|" + it[L.key])}" style="--i:${i}">
+      <span class="ic">${icon(L.iconOf(it))}</span>
+      <span class="grow"><div class="l">${esc(it.label)}</div><div class="t">${esc(it[L.key])}</div></span>
+      <span class="row-acts">
+        ${kind === "snip" ? `<button class="icon-btn" data-act="copy" title="Только скопировать">${icon("copy")}</button>` : ""}
+        <button class="icon-btn" data-act="edit" title="Изменить">${icon("edit")}</button>
+        <button class="icon-btn del" data-act="del" title="Удалить">${icon("trash")}</button>
+      </span></div>`;
+  });
+  if (group !== null) html += `</div>`;
+  const box = $(L.box);
+  box.innerHTML = html || (editing ? "" : "<div class='empty'>Пока пусто — нажми «Добавить»</div>");
+  if (editing && editing.kind === kind) bindEditor(kind);
+  box.querySelectorAll(".snip").forEach(el => el.onclick = (e) => onRowClick(kind, +el.dataset.i, e));
+  markNew(kind, box.querySelectorAll(".snip"));
+}
+
+async function onRowClick(kind, i, e) {
+  const it = listItems[kind][i], btn = e.target.closest("[data-act]");
+  if (btn && btn.dataset.act === "copy") { await api().copy(it.text); toast("Скопировано"); return; }
+  if (btn && btn.dataset.act === "edit") { startEditing(kind, i); return; }
+  if (btn && btn.dataset.act === "del") {
+    if (!btn.classList.contains("armed")) {           // первый клик — «Удалить?», второй — удаляет
+      btn.classList.add("armed"); btn.textContent = "Удалить?";
+      setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.innerHTML = icon("trash"); } }, 2500);
+      return;
+    }
+    const items = listItems[kind].filter((_, k) => k !== i);
+    await leave(e.target.closest(".snip"));
+    await LISTS[kind].save(items); toast("Удалено: " + it.label); renderList(kind); return;
+  }
+  if (kind === "snip") { const ok = await api().paste_snippet(it.text); toast(ok ? "Вставлено" : "Скопировано"); }
+  else toast((await api().open_link(it.open)) ? "Открываю: " + it.label : "Не открылось");
+}
+
+function editorHtml(kind) {
+  const L = LISTS[kind], items = listItems[kind];
+  const it = editing.index >= 0 ? items[editing.index] : { group: "", label: "", [L.key]: "" };
+  const groups = [...new Set(items.map(x => x.group).filter(Boolean))];
+  editing.group = editing.group ?? it.group ?? "";
+  const isNew = editing.group && !groups.includes(editing.group);
+  return `<div class="editor" id="ed-${kind}">
+    <label class="full">Группа
+      <div class="gpick">
+        ${groups.map(g => `<button type="button" data-g="${esc(g)}" class="${g === editing.group ? "on" : ""}">${esc(g)}</button>`).join("")}
+        ${isNew || editing.newGroup
+          ? `<input class="ed-newgroup" value="${esc(isNew ? editing.group : "")}" placeholder="название новой группы">`
+          : `<button type="button" class="new" data-new="1">+ Новая</button>`}
+      </div></label>
+    <label>Название<input class="ed-label" value="${esc(it.label || "")}" placeholder="как подписать строку"></label>
+    <label>${L.valueLabel}<input class="ed-value" value="${esc(it[L.key] || "")}" placeholder="${esc(L.placeholder)}"></label>
+    <div class="acts"><span class="hint">Enter — сохранить · Esc — отмена</span>
+      <button class="b ed-cancel">Отмена</button>
+      <button class="b primary ed-save">${editing.index >= 0 ? "Сохранить" : "Добавить"}</button></div>
+  </div>`;
+}
+
+function bindEditor(kind) {
+  const ed = $(`#ed-${kind}`), q = (s) => ed.querySelector(s);
+  const close = () => { editing = null; renderList(kind); };
+  // запоминаем, что уже введено, чтобы перерисовка кнопок групп не стирала поля
+  const keep = () => { editing.label = q(".ed-label").value; editing.value = q(".ed-value").value; };
+  if (editing.label !== undefined) { q(".ed-label").value = editing.label; q(".ed-value").value = editing.value; }
+  ed.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
+    keep(); editing.group = b.dataset.g; editing.newGroup = false; renderList(kind);
+  });
+  const nb = q("[data-new]");
+  if (nb) nb.onclick = () => { keep(); editing.newGroup = true; editing.group = ""; renderList(kind); };
+  const ng = q(".ed-newgroup");
+  if (ng) ng.oninput = () => { editing.group = ng.value; };
+  const save = async () => {
+    const L = LISTS[kind], items = [...listItems[kind]];
+    const group = (ng ? ng.value : editing.group || "").trim();
+    const row = { group, label: q(".ed-label").value.trim(), [L.key]: q(".ed-value").value.trim() };
+    if (!row.group) { toast("Выбери группу или создай новую"); return; }
+    if (!row.label || !row[L.key]) { toast("Нужны название и " + L.valueLabel.toLowerCase()); return; }
+    if (editing.index >= 0) items[editing.index] = { ...items[editing.index], ...row };
+    else {
+      const last = items.map(x => x.group).lastIndexOf(row.group);   // в конец своей группы
+      items.splice(last >= 0 ? last + 1 : items.length, 0, row);
+    }
+    await L.save(items); toast(editing.index >= 0 ? "Сохранено" : "Добавлено"); close();
+  };
+  q(".ed-save").onclick = save;
+  q(".ed-cancel").onclick = close;
+  ed.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  setTimeout(() => {
+    const target = ng && !ng.value ? ng : (editing.index >= 0 ? q(".ed-value") : q(".ed-label"));
+    target.focus();
+  }, 30);
+}
+
+function startEditing(kind, index) {
+  const prev = editing && editing.kind;
+  editing = { kind, index };
+  if (prev && prev !== kind) renderList(prev);   // убрать форму из другой вкладки
+  renderList(kind);
+}
+
+async function loadSnips() { renderList("snip"); }
+async function loadLinks() { renderList("links"); loadProfiles(); }
+async function loadProfiles() {
+  const b = await api().browser_info();
+  if (!b.chrome || !b.profiles.length) { $("#prof-box").hidden = true; return; }
+  $("#prof-box").hidden = false;
+  $("#links-hint").textContent = "Клик — открыть. Наведи — изменить или удалить.";
+  $("#prof").innerHTML = b.profiles.map(p => `<option value="${esc(p.dir)}" ${p.dir === b.current ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+}
+$("#prof").onchange = async (e) => { await api().set_chrome_profile(e.target.value); toast("Сайты теперь открываются в профиле: " + e.target.selectedOptions[0].text); };
+$("#snip-add").onclick = () => startEditing("snip", -1);
+$("#links-add").onclick = () => startEditing("links", -1);
+$("#snip-file").onclick = () => api().open_snippets_file();
+$("#links-file").onclick = () => api().open_links_file();
+
+/* ---------- быстрые ссылки ---------- */
+function linkIcon(l) {
+  const t = (l.open || "").toLowerCase();
+  if (t.startsWith("obsidian:")) return "obs";
+  if (t.startsWith("http")) return "globe";
+  if (/\.[a-z0-9]{2,4}$/.test(t)) return "open";
+  return "folder";
+}
+
+/* ---------- скриншоты ---------- */
+let shotsTimer = null, shotsSig = "";
+async function pollShots() {
+  clearTimeout(shotsTimer);
+  if (tab !== "shots") return;
+  if (!(await api().is_visible())) return;
+  const list = await api().screenshots();
+  const sig = list.map(s => s.path + s.when).join("|");
+  if (sig !== shotsSig) { shotsSig = sig; renderShots(list); }
+  shotsTimer = setTimeout(pollShots, 2000);
+}
+function renderShots(list) {
+  const grid = $("#shots-grid");
+  if (!list.length) { grid.innerHTML = "<div class='empty' style='grid-column:1/-1'>Скриншотов пока нет — Win+Shift+S</div>"; return; }
+  grid.innerHTML = list.map((s, i) => `
+    <div class="shot ${i === 0 ? "first" : ""}" data-i="${i}" data-k="${esc(s.path)}" style="--i:${i};background-image:url('${s.thumb || ""}')" title="Клик — вставить">
+      <span class="when">${esc(s.when)}</span>
+      <span class="acts">
+        <button data-a="copy" title="Только скопировать">${icon("copy")}</button>
+        <button data-a="open" title="Открыть">${icon("open")}</button>
+      </span>
+    </div>`).join("");
+  markNew("shots", grid.querySelectorAll(".shot"));
+  grid.querySelectorAll(".shot").forEach(el => {
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("[data-a]")) return;
+      dragFrom = { x: e.clientX, y: e.clientY, path: list[+el.dataset.i].path };
+    });
+  });
+  grid.querySelectorAll(".shot").forEach(el => el.onclick = async (e) => {
+    if (dragDone) { dragDone = false; return; }   // это было перетаскивание, а не клик
+    const s = list[+el.dataset.i], a = e.target.closest("[data-a]");
+    if (a && a.dataset.a === "copy") { toast((await api().shot_copy(s.path)) ? "Снимок скопирован" : "Не получилось"); return; }
+    if (a && a.dataset.a === "open") { api().shot_open(s.path); return; }
+    const ok = await api().shot_paste(s.path);
+    toast(ok ? "Вставлено" : "Скопировано — вставь Ctrl+V");
+  });
+}
+$("#shots-folder").onclick = () => api().open_shots_folder();
+
+// перетаскивание мышкой: сдвинул зажатый снимок на 6+ px — отдаём файл системному drag&drop Windows
+let dragFrom = null, dragDone = false;
+document.addEventListener("pointermove", async (e) => {
+  if (!dragFrom || !(e.buttons & 1)) { dragFrom = null; return; }
+  if (Math.hypot(e.clientX - dragFrom.x, e.clientY - dragFrom.y) < 6) return;
+  const from = dragFrom; dragFrom = null; dragDone = true;
+  const ok = from.paths ? await api().drag_files(from.paths) : await api().drag_shot(from.path);
+  if (ok) toast("Перетащено");
+  setTimeout(() => dragDone = false, 400);
+});
+document.addEventListener("pointerup", () => { dragFrom = null; });
+document.addEventListener("dragstart", (e) => { if (e.target.closest && e.target.closest(".shot, .file, #shelf-all")) e.preventDefault(); });
+
+/* ---------- полка ---------- */
+let shelfTimer = null, shelfSig = null, shelfList = [];   // null — «перерисовать обязательно» (подпись пустой полки тоже "")
+async function pollShelf() {
+  clearTimeout(shelfTimer);
+  if (tab !== "shelf") return;
+  if (!(await api().is_visible())) return;
+  const list = await api().shelf_items();
+  const sig = list.map(f => f.path + f.meta).join("|");
+  if (sig !== shelfSig) { shelfSig = sig; renderShelf(list); }
+  shelfTimer = setTimeout(pollShelf, 1500);
+}
+function renderShelf(list) {
+  shelfList = list;
+  const grid = $("#shelf-grid");
+  $("#shelf-all").hidden = list.length < 2;
+  $("#shelf-clear").hidden = !list.length;
+  if (!list.length) {
+    grid.innerHTML = "<div class='empty' style='grid-column:1/-1'>Полка пустая — перетащи файл к верхнему краю экрана и отпусти на плашку «Положить на полку»</div>";
+    return;
+  }
+  grid.innerHTML = list.map((f, i) => `
+    <div class="file" data-i="${i}" data-k="${esc(f.path)}" style="--i:${i}" title="${esc(f.path)}">
+      <span class="pic ${f.thumb ? "thumb" : ""}" style="background-image:url('${f.icon || ""}')"></span>
+      <span class="txt"><span class="nm">${esc(f.name)}</span><span class="mt">${esc(f.meta)}</span></span>
+      <span class="acts">
+        <button data-a="open" title="Открыть">${icon("open")}</button>
+        <button data-a="folder" title="Показать в папке">${icon("folder")}</button>
+        <button data-a="del" title="Убрать с полки (файл останется на месте)">${icon("x")}</button>
+      </span>
+    </div>`).join("");
+  markNew("shelf", grid.querySelectorAll(".file"));
+  grid.querySelectorAll(".file").forEach(el => {
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("[data-a]")) return;
+      dragFrom = { x: e.clientX, y: e.clientY, paths: [list[+el.dataset.i].path] };
+    });
+    el.onclick = async (e) => {
+      const a = e.target.closest("[data-a]"), f = list[+el.dataset.i];
+      if (!a) { if (dragDone) dragDone = false; return; }
+      if (a.dataset.a === "open") api().shot_open(f.path);
+      if (a.dataset.a === "folder") api().shelf_reveal(f.path);
+      if (a.dataset.a === "del") { await leave(el); await api().shelf_remove(f.path); shelfSig = null; pollShelf(); }
+    };
+    el.ondblclick = (e) => { if (!e.target.closest("[data-a]")) api().shot_open(list[+el.dataset.i].path); };
+  });
+}
+$("#shelf-all").addEventListener("pointerdown", (e) => {
+  if (e.button === 0 && shelfList.length) dragFrom = { x: e.clientX, y: e.clientY, paths: shelfList.map(f => f.path) };
+});
+$("#shelf-clear").onclick = async () => { await api().shelf_clear(); shelfSig = null; pollShelf(); toast("Полка очищена — сами файлы на месте"); };
+
+/* ---------- таймер ---------- */
+let tstate = { active: false }, tTimer = null;
+function tfmt(s) {
+  s = Math.ceil(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(x).padStart(2, "0");
+}
+function parseDur(v) {
+  v = (v || "").trim().toLowerCase();
+  let m;
+  if ((m = v.match(/^(\d+)[:.,](\d{2})$/))) return +m[1] * 60 + +m[2];   // 1:30, 1.30, 1,30 — минуты и секунды
+  v = v.replace(",", ".");
+  if ((m = v.match(/^(\d+):(\d{1,2})$/))) return +m[1] * 60 + +m[2];
+  if ((m = v.match(/^(\d+(?:\.\d+)?)\s*(с|сек)/))) return Math.round(+m[1]);
+  if ((m = v.match(/^(\d+(?:\.\d+)?)\s*ч/))) return Math.round(+m[1] * 3600);
+  if ((m = v.match(/^(\d+(?:\.\d+)?)\s*(м|мин)?$/))) return Math.round(+m[1] * 60);
+  return 0;
+}
+function paintTimer() {
+  const b = $("#timerbtn"), t = $("#timer-text");
+  b.classList.toggle("run", !!tstate.active);
+  const doneRecently = !tstate.active && tstate.done_at && (Date.now() / 1000 - tstate.done_at) < 60;
+  b.classList.toggle("done", !!doneRecently);
+  t.textContent = tstate.active ? tfmt(tstate.remaining) : (doneRecently ? "Время вышло" : "Таймер");
+  $("#tp-idle").hidden = !!tstate.active; $("#tp-run").hidden = !tstate.active;
+  if (tstate.active) $("#tp-left").textContent = tfmt(tstate.remaining);
+}
+async function pollTimer() {
+  clearTimeout(tTimer);
+  try { tstate = await api().timer_state(); } catch (e) {}
+  paintTimer();
+  tTimer = setTimeout(pollTimer, tstate.active || !$("#timerpop").hidden ? 500 : 2000);
+}
+async function startTimer(sec) {
+  if (!(sec > 0)) { toast("Не понял время — например 7, 1:30, 90с, 2ч"); return; }
+  tstate = await api().timer_start(sec); $("#tp-in").value = ""; paintTimer(); pollTimer();
+}
+$("#timerbtn").onclick = (e) => { e.stopPropagation(); $("#timerpop").hidden = !$("#timerpop").hidden; pollTimer(); };
+document.addEventListener("mousedown", (e) => { if (!e.target.closest("#timerpop, #timerbtn")) $("#timerpop").hidden = true; });
+document.querySelectorAll("#timerpop [data-min]").forEach(b => b.onclick = () => startTimer(+b.dataset.min * 60));
+$("#tp-go").onclick = () => startTimer(parseDur($("#tp-in").value));
+$("#tp-in").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); startTimer(parseDur(e.target.value)); } });
+$("#tp-plus").onclick = async () => { tstate = await api().timer_add(60); paintTimer(); };
+$("#tp-cancel").onclick = async () => { tstate = await api().timer_cancel(); paintTimer(); toast("Таймер отменён"); };
+
+/* ---------- заметки ---------- */
+function renderNotes(list) {
+  $("#notes").innerHTML = list.length
+    ? "<div class='label' style='margin-bottom:2px'>Сегодня</div>" + list.map(n => `<div class="note"><time>${esc(n.time)}</time><span>${esc(n.text)}</span></div>`).join("")
+    : "<div class='muted'>Сегодня заметок ещё нет</div>";
+}
+async function loadNotes() { renderNotes(await api().today_notes()); }
+$("#note-in").addEventListener("keydown", async (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    const r = await api().save_note($("#note-in").value);
+    if (r.ok) { $("#note-in").value = ""; renderNotes(r.notes); toast("Сохранено"); }
+  }
+});
+$("#note-open").onclick = () => api().open_inbox();
+
+/* ---------- стекло, шторка, булавка ---------- */
+async function refreshGlass() {
+  const g = await api().glass();
+  $("#glass").style.backgroundImage = g ? `url('${g}')` : "none";
+}
+let pinned = store.get("pinned", "0") === "1";
+function paintPin() { $("#pin").classList.toggle("on", pinned); }
+$("#pin").onclick = async () => { pinned = !pinned; store.set("pinned", pinned ? "1" : "0"); paintPin(); await api().set_pinned(pinned); };
+paintPin();
+
+/* ---------- живая шторка ----------
+   Каждую секунду выбираем самое важное: время вышло → событие началось → таймер → скоро событие →
+   музыка → часы. Сменилось состояние — новая форма (panel.py анимирует окно) и содержимое въезжает. */
+let islT = null, islCur = null, islFlashUntil = 0, islFlashText = "", islEq = null, islColorFor = null;
+const isStrip = () => window.innerHeight <= 120;
+const pad2 = (n) => String(n).padStart(2, "0");
+function hm(ts) { const d = new Date(ts * 1000); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+function inMin(sec) {
+  const m = Math.max(1, Math.round(sec / 60));
+  return m < 60 ? `через ${m} мин` : `через ${Math.floor(m / 60)} ч${m % 60 ? " " + (m % 60) + " мин" : ""}`;
+}
+function islState(st, ts, cal) {
+  const now = Date.now() / 1000, evs = (cal && cal.events) || [];
+  if (islFlashUntil > now) return { key: "flash", cls: "s-flash", w: 290, h: 32, r: 14,
+    html: `${icon("inbox")}<span class="i-title"><span>На полке · ${esc(islFlashText)}</span></span>` };
+  if (!ts.active && ts.done_at && now - ts.done_at < 15) return { key: "done", cls: "s-done", w: 290, h: 58, r: 22,
+    html: `${icon("timer")}<div class="i-col"><b class="i-big">Время вышло</b><span class="i-muted">наведи, чтобы открыть панель</span></div>` };
+  const started = evs.find(e => e.start <= now && now - e.start < 90);
+  if (started) return { key: "now:" + started.title + started.start, cls: "s-now", w: 380, h: 70, r: 24,
+    html: `<span class="i-dot"></span><div class="i-col"><span class="i-kicker">Сейчас · ${hm(started.start)}–${hm(started.end)}</span>
+      <b class="i-big">${esc(started.title)}</b>${started.loc ? `<span class="i-muted">${esc(started.loc)}</span>` : ""}</div>` };
+  if (ts.active) {
+    const left = Math.ceil(ts.remaining), frac = ts.total ? ts.remaining / ts.total : 0;
+    return { key: "timer", cls: "s-timer" + (left <= 10 ? " s-urgent" : ""), w: 214, h: 32, r: 14, bar: frac * 100,
+      html: `${icon("timer")}<b class="i-mono" id="il-t">${tfmt(ts.remaining)}</b><span class="i-muted">таймер</span>`,
+      live: { "il-t": tfmt(ts.remaining) } };
+  }
+  const soon = evs.find(e => e.start > now && e.start - now <= 30 * 60);
+  if (soon) return { key: "soon:" + soon.title + soon.start, cls: "s-soon", w: 330, h: 32, r: 14,
+    html: `<span class="i-dot"></span><span class="i-title"><span>${esc(soon.title)}</span></span><span class="i-muted" id="il-in">${inMin(soon.start - now)}</span>`,
+    live: { "il-in": inMin(soon.start - now) } };
+  if (st.ok && !st.empty && st.playing) return { key: "music:" + st.title + st.artist, cls: "s-music", w: 310, h: 34, r: 16, cover: st.cover,
+    html: `<span class="i-cover" style="${st.cover ? `background-image:url('${st.cover}')` : ""}"></span>
+      <span class="i-title"><span>${esc(st.title || "Без названия")}${st.artist ? ` <span class="i-muted">— ${esc(st.artist)}</span>` : ""}</span></span>
+      <span class="i-eq"><i></i><i></i><i></i><i></i></span>` };
+  const d = new Date(), date = d.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" }).replace(/\.$/, "");
+  return { key: "idle", cls: "s-idle", w: 196, h: 32, r: 14,
+    html: `<b class="i-clock" id="il-clk">${pad2(d.getHours())}:${pad2(d.getMinutes())}</b><span class="i-sep"></span><span class="i-date" id="il-date">${esc(date)}</span>`,
+    live: { "il-clk": `${pad2(d.getHours())}:${pad2(d.getMinutes())}`, "il-date": date } };
+}
+function islShape(s) {
+  const isl = $("#isl");
+  isl.style.setProperty("--sw", s.w + "px"); isl.style.setProperty("--sh", s.h + "px"); isl.style.setProperty("--sr", s.r + "px");
+  try { api().strip_shape(s.w, s.h, s.r); } catch (e) {}
+}
+function islRender(s) {
+  const isl = $("#isl"), inner = $("#isl-in");
+  isl.className = "isl " + s.cls + (isl.classList.contains("near") ? " near" : "");   // «near» ставит panel.py
+  $("#isl-bar").style.setProperty("--bw", (s.bar || 0) + "%");
+  $("#isl-bar").style.display = s.bar === undefined ? "none" : "";
+  if (!islCur || islCur.key !== s.key) {
+    const sized = !islCur || islCur.w !== s.w || islCur.h !== s.h;
+    inner.innerHTML = s.html;
+    inner.classList.remove("swap"); void inner.offsetWidth; inner.classList.add("swap");
+    if (s.key === "idle") inner.style.justifyContent = "center"; else inner.style.justifyContent = "";
+    if (sized) islShape(s);
+    islCur = s;
+    setTimeout(islMarquee, 450);
+    islMusic(s);
+  } else if (s.live) {
+    for (const [id, text] of Object.entries(s.live)) { const el = document.getElementById(id); if (el && el.textContent !== text) el.textContent = text; }
+  }
+}
+function islMarquee() {
+  const t = $("#isl-in .i-title"); if (!t) return;
+  const span = t.firstElementChild;
+  if (!span || span.dataset.mq || span.scrollWidth - t.clientWidth <= 4) return;
+  span.dataset.mq = "1";
+  const html = span.innerHTML;
+  span.innerHTML = `<span class="mq-a">${html}</span><span class="mq-a" aria-hidden="true">${html}</span>`;
+  const one = span.firstElementChild.offsetWidth;            // одна копия вместе с промежутком
+  t.style.setProperty("--md", -one + "px");
+  t.style.setProperty("--mt", Math.max(5, one / 30) + "s");   // ~30 px в секунду
+  t.classList.add("marq");
+}
+function islHover(on) { $("#isl").classList.toggle("near", on); }   // panel.py: мышь подошла к шторке
+function islMusic(s) {        // эквалайзер — по настоящей громкости; цвет — из обложки
+  clearInterval(islEq); islEq = null;
+  if (!s.key.startsWith("music")) return;
+  if (s.cover && islColorFor !== s.cover) {
+    islColorFor = s.cover;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas"); c.width = c.height = 8;
+        const g = c.getContext("2d"); g.drawImage(img, 0, 0, 8, 8);
+        const px = g.getImageData(0, 0, 8, 8).data; let r = 0, gg = 0, b = 0, n = 0;
+        for (let i = 0; i < px.length; i += 4) { const mx = Math.max(px[i], px[i+1], px[i+2]), mn = Math.min(px[i], px[i+1], px[i+2]);
+          if (mx - mn < 25) continue; r += px[i]; gg += px[i+1]; b += px[i+2]; n++; }    // серое не берём — нужен «цвет» обложки
+        if (n) $("#isl").style.setProperty("--isl-accent", `rgb(${r/n|0},${gg/n|0},${b/n|0})`);
+      } catch (e) {}
+    };
+    img.src = s.cover;
+  }
+  const bars = [...document.querySelectorAll("#isl-in .i-eq i")], k = [0.75, 1.15, 0.9, 1.05];
+  islEq = setInterval(async () => {
+    if (!isStrip()) { clearInterval(islEq); return; }
+    let lv = 0; try { lv = await api().audio_level(); } catch (e) {}
+    bars.forEach((b, i) => b.style.setProperty("--h", Math.max(3, Math.min(16, 3 + lv * 26 * k[i] * (0.7 + Math.random() * 0.6))) + "px"));
+  }, 110);
+}
+async function islTick() {
+  clearTimeout(islT);
+  if (!isStrip()) { clearInterval(islEq); islEq = null; return; }
+  let st = {}, ts = {}, cal = {};
+  try { [st, ts, cal] = await Promise.all([api().media_state(), api().timer_state(), api().calendar()]); } catch (e) {}
+  tstate = ts || tstate;
+  islRender(islState(st || {}, ts || {}, cal || {}));
+  islT = setTimeout(islTick, 1000);
+}
+function islEnter() { islCur = null; islTick(); }            // panel.py: окно стало шторкой
+function islFlash(text) { islFlashText = text; islFlashUntil = Date.now() / 1000 + 2.6; islTick(); }
+window.addEventListener("resize", () => { if (isStrip()) islTick(); });
+
+/* ---------- шпаргалка ---------- */
+function helpOpen(on) {
+  $("#help").hidden = !on;
+  $("#helpbtn").classList.toggle("on", on);
+}
+$("#helpbtn").onclick = () => helpOpen($("#help").hidden);
+$("#help-close").onclick = () => helpOpen(false);
+
+/* ---------- настройки ---------- */
+let cfg = null;
+const TAB_NAMES = { player: ["music", "Плеер"], tr: ["tr", "Перевод"], snip: ["snip", "Тексты"], links: ["bolt", "Ссылки"],
+                    shots: ["img", "Снимки"], shelf: ["inbox", "Полка"], note: ["note", "Заметка"] };
+const MUSIC_NAMES = { yandex: "Яндекс Музыку", spotify: "Spotify", ytmusic: "YouTube Music" };
+function musicName() { return cfg ? MUSIC_NAMES[cfg.settings.music_app] || "" : ""; }
+function visibleTabs() { const on = cfg ? cfg.settings.tabs : TABS; return TABS.filter(t => on.includes(t)); }
+function applyConfig() {
+  const st = cfg.settings, dark = st.theme === "dark" || (st.theme === "system" && cfg.system_dark);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const order = (st.tab_order || []).filter(t => TABS.includes(t));
+  if (order.length === TABS.length && order.join() !== TABS.join()) {     // порядок вкладок, как их расставили
+    TABS.splice(0, TABS.length, ...order);
+    order.forEach(t => $(".tabs").appendChild($(`.tabs button[data-tab="${t}"]`)));
+  }
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("off", !st.tabs.includes(b.dataset.tab)));
+  if (!st.tabs.includes(tab) && visibleTabs().length) show(visibleTabs()[0]); else movePill(true);
+  $("#note-where").textContent = "Сохраняется в " + (st.notes_obsidian ? "Obsidian → " : "") + cfg.notes_dir.split(/[\\/]/).pop();
+}
+async function loadConfig() { cfg = await api().get_config(); applyConfig(); }
+async function setConfig(patch) { cfg.settings = await api().set_config(patch); cfg = await api().get_config(); applyConfig(); renderSettings(); }
+function segBind(id, key) {
+  $(id).querySelectorAll("button").forEach(b => b.onclick = () => setConfig({ [key]: b.dataset.v }));
+}
+function renderSettings() {
+  if (!cfg) return;
+  const st = cfg.settings;
+  [["#set-theme", "theme"], ["#set-browser", "browser"], ["#set-music", "music_app"]].forEach(([id, key]) =>
+    $(id).querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === st[key])));
+  $("#set-tabs").innerHTML = TABS.map(t => `<button data-t="${t}" class="${st.tabs.includes(t) ? "on" : ""}">${icon(TAB_NAMES[t][0])}${TAB_NAMES[t][1]}</button>`).join("");
+  $("#set-tabs").querySelectorAll("button").forEach(b => b.onclick = () => {
+    const on = st.tabs.includes(b.dataset.t) ? st.tabs.filter(x => x !== b.dataset.t) : TABS.filter(x => st.tabs.includes(x) || x === b.dataset.t);
+    if (!on.length) { toast("Хотя бы одна вкладка нужна"); return; }
+    setConfig({ tabs: on });
+  });
+  $("#set-prof-row").hidden = st.browser !== "chrome" || !cfg.chrome || !cfg.profiles.length;
+  $("#set-prof").innerHTML = cfg.profiles.map(p => `<option value="${esc(p.dir)}" ${p.dir === st.chrome_profile ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  $("#set-notes-path").textContent = cfg.notes_dir; $("#set-notes-path").title = cfg.notes_dir;
+  $("#set-obsidian").checked = !!st.notes_obsidian;
+  $("#set-shelf").checked = st.shelf !== false;
+  $("#set-auto").checked = !!cfg.autostart;
+  $("#set-ver").textContent = cfg.version;
+  if (document.activeElement !== $("#set-cal")) $("#set-cal").value = st.calendar_ics || "";
+  api().update_info().then(updText);
+  calStateText();
+}
+async function calStateText(force) {
+  const c = force ? await api().calendar_check() : await api().calendar();
+  const el = $("#set-cal-state");
+  if (!c.on) { el.textContent = "Не подключён"; return; }
+  if (c.error) { el.textContent = "Не получилось загрузить: " + c.error; return; }
+  if (!c.loaded) { el.textContent = "Загружаю…"; setTimeout(() => calStateText(), 1500); return; }
+  const next = c.events[0];
+  el.textContent = `Подключён · сегодня событий: ${c.today}` + (next ? ` · ближайшее: ${next.title}, ${new Date(next.start * 1000).toLocaleString("ru-RU", { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : "");
+}
+function updText(u) {
+  const t = $("#upd-text"), go = $("#upd-go");
+  go.hidden = !(u.available && u.installed);
+  $("#setbtn").classList.toggle("upd", !!(u.available && u.installed));
+  if (u.available) t.textContent = `Доступна версия ${u.latest}` + (u.installed ? "" : " (рабочая копия — обновляй файлами)");
+  else if (u.error) t.textContent = "Не удалось проверить обновления";
+  else t.textContent = u.latest ? "У тебя последняя версия" : "Обновления";
+}
+function updateAvailable(v) { $("#setbtn").classList.add("upd"); toast(`Доступна версия ${v} — обнови в настройках`); }
+$("#upd-check").onclick = async () => { $("#upd-text").textContent = "Проверяю…"; updText(await api().update_check()); };
+$("#upd-go").onclick = async () => {
+  $("#upd-text").textContent = "Скачиваю обновление…"; $("#upd-go").disabled = true;
+  const ok = await api().update_install();
+  $("#upd-text").textContent = ok ? "Ставлю — панель перезапустится сама" : "Не получилось скачать";
+  $("#upd-go").disabled = false;
+};
+$("#set-cal-save").onclick = async () => { await setConfig({ calendar_ics: $("#set-cal").value.trim() }); $("#set-cal-state").textContent = "Загружаю…"; calStateText(true); };
+segBind("#set-theme", "theme"); segBind("#set-browser", "browser"); segBind("#set-music", "music_app");
+$("#set-prof").onchange = (e) => setConfig({ chrome_profile: e.target.value });
+$("#set-obsidian").onchange = (e) => setConfig({ notes_obsidian: e.target.checked });
+$("#set-shelf").onchange = (e) => setConfig({ shelf: e.target.checked });
+$("#set-auto").onchange = async (e) => { const on = await api().set_autostart(e.target.checked); toast(on ? "Будет запускаться с Windows" : "Автозапуск выключен"); await loadConfig(); renderSettings(); };
+$("#set-notes-pick").onclick = async () => { const d = await api().pick_folder(); if (d) setConfig({ notes_dir: d }); };
+$("#set-data").onclick = () => api().open_data_dir();
+function settingsOpen(on) {
+  $("#settings").hidden = !on; $("#setbtn").classList.toggle("on", on);
+  if (on) { helpOpen(false); loadConfig().then(renderSettings); }
+}
+$("#setbtn").onclick = () => settingsOpen($("#settings").hidden);
+$("#set-close").onclick = () => settingsOpen(false);
+
+/* ---------- приветствие и экскурсия ---------- */
+const TOUR = [
+  { el: ".tabs", k: "Вкладки", t: "Всё, что умеет панель", p: "Переключай кликом или <kbd>Ctrl+1…7</kbd>. Подержи вкладку и перетащи — поменяешь порядок. Лишние выключаются в настройках." },
+  { tab: "player", el: "#player", t: "Плеер для всего", p: "Видит всё, что играет в Windows: Яндекс Музыку, Spotify, YouTube в браузере. Ниже — громкость системы, отдельно громкость приложения и куда идёт звук." },
+  { tab: "tr", el: "#tr-in", t: "Переводчик", p: "Скопируй текст где угодно — он сам появится здесь и переведётся. Язык определяется сам." },
+  { tab: "snip", el: "#snips", t: "Заготовки", p: "Почта, ответы, шаблоны. Клик — текст вставится в то окно, где ты печатал. Добавляй и меняй прямо тут." },
+  { tab: "links", el: "#links-list", t: "Ссылки", p: "Сайты, папки и файлы в один клик. Браузер и профиль Chrome выбираются в настройках." },
+  { tab: "shots", el: "#shots-grid", t: "Скриншоты", p: "Делай снимок <kbd>Win+Shift+S</kbd> — он появится здесь. Клик — вставить, можно перетащить прямо в чат." },
+  { tab: "shelf", el: "#shelf-grid", t: "Полка для файлов", p: "Тащишь файл к верхнему краю экрана — шторка превращается в «Положить на полку». Отсюда файлы забираешь перетаскиванием туда, куда нужно." },
+  { tab: "note", el: "#note-in", t: "Быстрая заметка", p: "Мысль → <kbd>Enter</kbd>. Сохраняется в файл дня в папке заметок — можно и в Obsidian." },
+  { el: "#timerbtn", t: "Таймер", p: "Поставь на 5 минут или впиши своё: «1:30», «90с». Отсчёт будет виден в шторке, а в конце она замигает." },
+  { el: "#setbtn", t: "Настройки", p: "Тёмная тема, какие вкладки показывать, календарь в шторке, папка заметок, автозапуск." },
+  { el: null, t: "И главное — шторка", p: "Когда панель свёрнута, сверху экрана остаётся маленькая шторка: часы, музыка с эквалайзером, таймер, события календаря. Наведи на неё — панель раскроется. <kbd>Alt+Пробел</kbd> — открыть откуда угодно, <kbd>Esc</kbd> — закрыть." },
+];
+let tourSteps = [], tourI = 0, tourPinned = false;
+function welcomeShow() { settingsOpen(false); helpOpen(false); $("#welcome").hidden = false; }
+function welcomeDone() { $("#welcome").hidden = true; if (cfg && !cfg.settings.onboarded) setConfig({ onboarded: true }); }
+function tourStart() {
+  $("#welcome").hidden = true; settingsOpen(false); helpOpen(false);
+  tourPinned = pinned; if (!pinned) api().set_pinned(true);       // пока идёт экскурсия, панель не сворачивается
+  tourSteps = TOUR.filter(s => !s.tab || visibleTabs().includes(s.tab));
+  tourI = 0; $("#tour").hidden = false;
+  $("#tour-dots").innerHTML = tourSteps.map(() => "<i></i>").join("");
+  tourShow();
+}
+function tourShow() {
+  const s = tourSteps[tourI];
+  if (s.tab && s.tab !== tab) show(s.tab);
+  const body = $("#tour-body");
+  body.innerHTML = `<div class="k">${s.k || "Шаг " + (tourI + 1) + " из " + tourSteps.length}</div><h3>${s.t}</h3><p>${s.p}</p>`;
+  body.classList.remove("swap"); void body.offsetWidth; body.classList.add("swap");
+  $("#tour-dots").querySelectorAll("i").forEach((d, i) => d.classList.toggle("on", i === tourI));
+  $("#tour-back").style.visibility = tourI ? "" : "hidden";
+  $("#tour-next").textContent = tourI === tourSteps.length - 1 ? "Готово" : "Дальше";
+  setTimeout(tourPlace, s.tab ? 300 : 30);                          // вкладка успевает въехать
+}
+function tourPlace() {
+  const s = tourSteps[tourI], spot = $("#tour-spot"), card = $("#tour-card"), W = innerWidth, H = innerHeight;
+  const el = s.el && $(s.el), pad = 6;
+  let r = null;
+  if (el) {
+    const b = el.getBoundingClientRect();
+    r = { x: b.left - pad, y: b.top - pad, w: b.width + pad * 2, h: Math.min(b.height + pad * 2, H * 0.55) };
+    spot.classList.remove("none");
+    Object.assign(spot.style, { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px",
+                                borderRadius: (r.h < 60 ? 14 : 20) + "px" });
+  } else spot.classList.add("none");
+  const cw = 310, ch = card.offsetHeight || 170;
+  let x, y;
+  if (!r) { x = (W - cw) / 2; y = (H - ch) / 2; }
+  else {
+    x = Math.max(12, Math.min(W - cw - 12, r.x + r.w / 2 - cw / 2));
+    y = r.y + r.h + 12 + ch < H - 8 ? r.y + r.h + 12 : Math.max(8, r.y - ch - 12);
+    if (y < r.y + r.h && y + ch > r.y) {                            // не помещается ни снизу, ни сверху — сбоку
+      x = r.x + r.w + 12 + cw < W ? r.x + r.w + 12 : Math.max(12, r.x - cw - 12); y = Math.max(8, Math.min(H - ch - 8, r.y));
+    }
+  }
+  card.style.left = x + "px"; card.style.top = y + "px";
+}
+function tourEnd() {
+  $("#tour").hidden = true;
+  if (!tourPinned) api().set_pinned(false);
+  welcomeDone();
+  if (visibleTabs().length) show(visibleTabs()[0]);
+  toast("Готово! Alt+Пробел — открыть панель");
+}
+$("#tour-next").onclick = () => { if (tourI < tourSteps.length - 1) { tourI++; tourShow(); } else tourEnd(); };
+$("#tour-back").onclick = () => { if (tourI > 0) { tourI--; tourShow(); } };
+$("#tour-skip").onclick = tourEnd;
+$("#wel-tour").onclick = tourStart;
+$("#wel-skip").onclick = welcomeDone;
+$("#set-tour").onclick = tourStart;
+window.addEventListener("resize", () => { if (!$("#tour").hidden && !isStrip()) tourPlace(); });
+
+/* ---------- анимации ---------- */
+const seenKeys = {};
+function markNew(kind, els) {   // карточки, которых не было при прошлой отрисовке, «выпрыгивают»
+  const prev = seenKeys[kind], now = new Set();
+  els.forEach(el => { now.add(el.dataset.k); if (prev && !prev.has(el.dataset.k)) el.classList.add("pop"); });
+  seenKeys[kind] = now;
+}
+function leave(el) {            // удалённая карточка сначала сжимается и гаснет
+  if (!el) return Promise.resolve();
+  el.classList.add("leaving");
+  return new Promise(r => setTimeout(r, 150));
+}
+function movePill(instant) {
+  const pill = $(".tab-pill"), b = $(".tabs button.on");
+  if (!pill || !b) return;
+  pill.classList.toggle("instant", !!instant);
+  pill.style.width = b.offsetWidth + "px";
+  pill.style.transform = `translateX(${b.offsetLeft}px)`;
+  if (instant) { void pill.offsetWidth; pill.classList.remove("instant"); }
+}
+window.addEventListener("resize", () => movePill(true));   // панель сменила ширину (другой монитор, шторка)
+
+/* вкладки: долгое нажатие — вкладка «поднимается», её можно переставить */
+let tabDrag = null, tabDragUsed = false;
+function tabButtons() { return [...document.querySelectorAll(".tabs button:not(.off)")]; }
+function nearestTab(x) {
+  let best = null, bd = 1e9;
+  for (const b of tabButtons()) { const c = b.offsetLeft + b.offsetWidth / 2, d = Math.abs(c - x); if (d < bd) { bd = d; best = b; } }
+  return best;
+}
+$(".tabs").addEventListener("pointerdown", (e) => {
+  const b = e.target.closest(".tabs button");
+  if (!b || e.button !== 0) return;
+  const box = $(".tabs").getBoundingClientRect();
+  tabDrag = { b, x0: e.clientX, left: box.left, mode: null, lastX: e.clientX, lastT: performance.now(), v: 0,
+              timer: setTimeout(() => startReorder(e.pointerId), 420) };
+});
+function startReorder(pid) {
+  if (!tabDrag || tabDrag.mode) return;
+  tabDrag.mode = "reorder";
+  $(".tabs").setPointerCapture(pid);
+  $(".tabs").classList.add("reorder");
+  tabDrag.b.classList.add("lift");
+}
+$(".tabs").addEventListener("pointermove", (e) => {
+  const d = tabDrag; if (!d) return;
+  const dx = e.clientX - d.x0, now = performance.now();
+  d.v = 0.7 * d.v + 0.3 * ((e.clientX - d.lastX) / Math.max(1, now - d.lastT)) * 1000;   // px/с, сглаженно
+  d.lastX = e.clientX; d.lastT = now;
+  if (!d.mode && Math.abs(dx) > 6) { clearTimeout(d.timer); tabDrag = null; return; }   // сдвинул сразу — не перестановка
+  if (d.mode === "reorder") {
+    const list = tabButtons(), i = list.indexOf(d.b);
+    d.b.style.transform = `translateX(${dx}px)`;
+    const target = nearestTab(d.b.offsetLeft + d.b.offsetWidth / 2 + dx);
+    const j = list.indexOf(target);
+    if (target && j !== i) {                     // проехали соседа — меняемся местами (с плавным сдвигом)
+      const before = new Map(list.map(t => [t, t.getBoundingClientRect().left]));
+      const left0 = d.b.offsetLeft;
+      if (j > i) target.after(d.b); else target.before(d.b);
+      d.x0 += d.b.offsetLeft - left0;
+      d.b.style.transform = `translateX(${e.clientX - d.x0}px)`;
+      list.forEach(t => {
+        if (t === d.b) return;
+        const shift = before.get(t) - t.getBoundingClientRect().left;
+        if (!shift) return;
+        t.style.transition = "none"; t.style.transform = `translateX(${shift}px)`;
+        requestAnimationFrame(() => { t.style.transition = ""; t.style.transform = ""; });
+      });
+    }
+  }
+});
+function endTabDrag(e) {
+  const d = tabDrag; tabDrag = null;
+  if (!d) return;
+  clearTimeout(d.timer);
+  if (d.mode) tabDragUsed = true;                // отпускание после жеста — не клик
+  if (d.mode === "reorder") {
+    d.b.classList.remove("lift"); d.b.style.transform = "";
+    $(".tabs").classList.remove("reorder");
+    const order = [...document.querySelectorAll(".tabs button")].map(t => t.dataset.tab);
+    TABS.splice(0, TABS.length, ...order);
+    movePill();
+    if (cfg) setConfig({ tab_order: order });
+    toast("Порядок вкладок сохранён");
+  }
+  setTimeout(() => { tabDragUsed = false; }, 50);
+}
+$(".tabs").addEventListener("pointerup", endTabDrag);
+$(".tabs").addEventListener("pointercancel", endTabDrag);
+function enterAnim() {
+  const sh = $(".shell"); sh.classList.remove("enter"); void sh.offsetWidth; sh.classList.add("enter");
+  clearTimeout(enterAnim.h); enterAnim.h = setTimeout(() => sh.classList.remove("enter"), 700);
+}
+
+/* «вырез» — вызывает panel.py: раскрытие (notchIn), сжатие в шторку (notchOut → notchDone) */
+function notchIn() {
+  const r = document.documentElement;
+  r.classList.remove("notch-out", "notch-in"); void r.offsetWidth; r.classList.add("notch-in");
+  clearTimeout(notchIn.h); notchIn.h = setTimeout(() => r.classList.remove("notch-in"), 700);
+}
+function notchOut() { document.documentElement.classList.add("notch-out"); }
+function notchDone() { document.documentElement.classList.remove("notch-out"); }
+
+/* приёмник полки — вызывает panel.py; w, h — видимая часть окна в физических пикселях */
+function dropMode(on, w, h) {
+  const r = document.documentElement, d = window.devicePixelRatio || 1;
+  if (!on) { r.classList.remove("drop"); return; }
+  r.style.setProperty("--drop-w", w / d + "px"); r.style.setProperty("--drop-h", h / d + "px");
+  $("#drop").className = "";
+  $("#drop-t").textContent = "Положить на полку"; $("#drop-s").textContent = "отпусти файл здесь";
+  r.classList.add("drop");
+}
+function dropHot(on) { $("#drop").classList.toggle("hot", on); }
+function dropDone(title, sub) {
+  const d = $("#drop"); d.classList.remove("hot"); d.classList.add("done");
+  $("#drop-t").textContent = "✓ " + title; $("#drop-s").textContent = sub;
+  shelfSig = null;
+}
+// файл, брошенный мимо «ловца» прямо на страницу, не должен открыться в окне панели вместо интерфейса
+["dragover", "drop"].forEach(t => document.addEventListener(t, e => {
+  if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault();
+}));
+function notchRadius() {   // 20 и 14 — PANEL_R и STRIP_R из panel.py; panel.py уже умножает их на масштаб монитора
+  const r = document.documentElement.style;
+  r.setProperty("--panel-r", "20px"); r.setProperty("--strip-r", "14px");
+}
+notchRadius();
+window.addEventListener("resize", notchRadius);
+
+window.onShown = () => { refreshGlass(); show(tab); enterAnim(); pollTimer(); loadConfig(); };
+window.addEventListener("pywebviewready", async () => {
+  await api().set_pinned(pinned); await loadConfig(); show(tab); pollTimer();
+  if (!cfg.settings.onboarded) welcomeShow();                       // первый запуск — приветствие
+});
+</script>
+</body>
+</html>

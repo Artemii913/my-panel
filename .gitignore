@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.log
+settings.json
+links.json
+snippets.json
+dist/
+work/
+release/
+*.spec
